@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pentaflip — Cairo-48</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1d2026;
+    --panel-2: #23272f;
+    --text: #e8e6e0;
+    --text-dim: #9aa0ab;
+    --line: #343943;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 700px at 50% -10%, #20242b 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 40px;
+  }
+  header { text-align: center; margin-bottom: 18px; }
+  header h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+  }
+  header .sub { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 14px;
+  }
+  .controls .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-right: 2px; }
+  .stone-btn {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.18);
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    transition: transform 0.08s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    background: transparent;
+  }
+  .stone-btn .chip {
+    position: absolute; inset: 5px;
+    border-radius: 50%;
+    box-shadow: inset 0 -3px 5px rgba(0,0,0,0.35), inset 0 2px 3px rgba(255,255,255,0.35);
+  }
+  .stone-btn:hover { transform: scale(1.08); }
+  .stone-btn.active {
+    border-color: #ffd54f;
+    box-shadow: 0 0 0 3px rgba(255,213,79,0.25);
+  }
+  .reset-btn {
+    margin-left: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .reset-btn:hover { background: #2c313b; }
+
+  .board-wrap {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    max-width: 720px;
+    width: 100%;
+  }
+  svg.board { width: 100%; height: auto; display: block; }
+
+  .cell { cursor: pointer; transition: filter 0.12s ease; }
+  .cell:hover { filter: brightness(1.15); }
+
+  .status {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+    text-align: center;
+    min-height: 18px;
+  }
+  .status b { color: var(--text); font-weight: 600; }
+
+  .legend {
+    margin-top: 14px;
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.3); display: inline-block; }
+
+  footer {
+    margin-top: 18px;
+    max-width: 640px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.5;
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PENTAFLIP</h1>
+  <div class="sub">Cairo-48 · an all-odd Cairo pentagonal board with the canonical 3-colouring</div>
+</header>
+
+<div class="controls">
+  <span class="label">Stone</span>
+  <div id="stoneButtons" style="display:flex;gap:8px;"></div>
+  <button id="resetBtn" class="reset-btn">Reset board</button>
+</div>
+
+<div class="board-wrap">
+  <svg id="board" class="board" viewBox="0 0 100 100"></svg>
+</div>
+
+<div id="status" class="status"></div>
+
+<div class="legend">
+  <span><i class="swatch" style="background:#f2d8a7;"></i> A</span>
+  <span><i class="swatch" style="background:#bcdcc6;"></i> B</span>
+  <span><i class="swatch" style="background:#bcccee;"></i> C</span>
+</div>
+
+<script>
+const STONES = {
+  black: { base: "#202329", name: "Black" },
+  white: { base: "#f2f2f0", name: "White" },
+  red:   { base: "#d4504b", name: "Red" },
+  blue:  { base: "#4a74d6", name: "Blue" },
+};
+let selectedColour = "black";
+const stones = new Array(48).fill(null);
+
+const CELLS = [
+  [0,-2.3660,-2.7321,"C"],[1,-2.8660,-1.8660,"A"],[2,-0.5000,-3.2321,"C"],[3,-1.5000,-3.2321,"B"],
+  [4,-1.8660,-1.8660,"B"],[5,-1.0000,-2.3660,"A"],[6,-1.8660,-0.8660,"A"],[7,-2.8660,-0.8660,"C"],
+  [8,-3.2321,0.5000,"C"],[9,-2.3660,0.0000,"B"],[10,-3.2321,1.5000,"B"],[11,-0.0000,-2.3660,"B"],
+  [12,0.8660,-2.8660,"A"],[13,-0.0000,-1.3660,"A"],[14,-1.0000,-1.3660,"C"],[15,-1.3660,0.0000,"C"],
+  [16,-0.5000,-0.5000,"B"],[17,-1.3660,1.0000,"B"],[18,-2.3660,1.0000,"A"],[19,-2.7321,2.3660,"A"],
+  [20,-1.8660,1.8660,"C"],[21,1.8660,-2.8660,"B"],[22,1.8660,-1.8660,"A"],[23,0.8660,-1.8660,"C"],
+  [24,0.5000,-0.5000,"C"],[25,1.3660,-1.0000,"B"],[26,0.5000,0.5000,"B"],[27,-0.5000,0.5000,"A"],
+  [28,-0.8660,1.8660,"A"],[29,0.0000,1.3660,"C"],[30,-0.8660,2.8660,"C"],[31,-1.8660,2.8660,"B"],
+  [32,2.7321,-2.3660,"C"],[33,2.3660,-1.0000,"C"],[34,3.2321,-1.5000,"B"],[35,2.3660,-0.0000,"B"],
+  [36,1.3660,-0.0000,"A"],[37,1.0000,1.3660,"A"],[38,1.8660,0.8660,"C"],[39,1.0000,2.3660,"C"],
+  [40,0.0000,2.3660,"B"],[41,0.5000,3.2321,"A"],[42,3.2321,-0.5000,"A"],[43,2.8660,0.8660,"A"],
+  [44,2.8660,1.8660,"C"],[45,1.8660,1.8660,"B"],[46,1.5000,3.2321,"B"],[47,2.3660,2.7321,"A"],
+];
+
+const CELL_COLOUR = { A: "#f2d8a7", B: "#bcdcc6", C: "#bcccee" };
+
+// ---- geometry: Cairo pentagons via the snub-square lattice ----
+function buildCells() {
+  const S = (1 + Math.sqrt(3)) / 2;
+  const V1 = [S * Math.cos(Math.PI / 6), S * Math.sin(Math.PI / 6)];
+  const V2 = [S * Math.cos((2 * Math.PI) / 3), S * Math.sin((2 * Math.PI) / 3)];
+  const r = (v) => Math.round(v * 10000) / 10000;
+  const key = (x, y) => r(x) + "," + r(y);
+  const rot = (p, deg) => {
+    const a = (deg * Math.PI) / 180;
+    return [p[0] * Math.cos(a) - p[1] * Math.sin(a), p[0] * Math.sin(a) + p[1] * Math.cos(a)];
+  };
+  const squareCorners = (i, j) => {
+    const c = [i * V1[0] + j * V2[0], i * V1[1] + j * V2[1]];
+    const d = (i + j) % 2 === 0 ? 0 : 60;
+    return [rot([0.5, 0.5], d), rot([-0.5, 0.5], d), rot([-0.5, -0.5], d), rot([0.5, -0.5], d)]
+      .map((p) => [c[0] + p[0], c[1] + p[1]]);
+  };
+
+  const grid = new Map();
+  for (let i = -16; i <= 16; i++) {
+    for (let j = -16; j <= 16; j++) {
+      for (const p of squareCorners(i, j)) {
+        const k = key(p[0], p[1]);
+        if (!grid.has(k)) grid.set(k, p);
+      }
+    }
+  }
+
+  const neighbours = (k) => {
+    const [x, y] = grid.get(k);
+    const out = [];
+    for (const [k2, p] of grid) {
+      if (k2 === k) continue;
+      if (Math.hypot(p[0] - x, p[1] - y) < 1.05) out.push(k2);
+    }
+    return out;
+  };
+
+  const pentagon = (k) => {
+    const [x0, y0] = grid.get(k);
+    const ns = neighbours(k);
+    ns.sort((a, b) => {
+      const pa = grid.get(a), pb = grid.get(b);
+      return Math.atan2(pa[1] - y0, pa[0] - x0) - Math.atan2(pb[1] - y0, pb[0] - x0);
+    });
+    const verts = [];
+    for (let t = 0; t < ns.length; t++) {
+      const a = ns[t], b = ns[(t + 1) % ns.length];
+      const [x1, y1] = grid.get(a), [x2, y2] = grid.get(b);
+      const d = Math.hypot(x1 - x2, y1 - y2);
+      if (Math.abs(d - 1) < 1e-3) verts.push([(x0 + x1 + x2) / 3, (y0 + y1 + y2) / 3]);
+      else verts.push([(x1 + x2) / 2, (y1 + y2) / 2]);
+    }
+    return verts;
+  };
+
+  return CELLS.map((c, idx) => ({
+    id: c[0], x: c[1], y: c[2], colour: c[3],
+    pentagon: pentagon(key(c[1], c[2])),
+  }));
+}
+
+const cells = buildCells();
+const svg = document.getElementById("board");
+
+// compute viewBox from pentagon bounds with padding
+let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+for (const c of cells) for (const [x, y] of c.pentagon) {
+  if (x < minX) minX = x; if (y < minY) minY = y;
+  if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+}
+const pad = 0.35;
+svg.setAttribute("viewBox", `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`);
+
+const NS = "http://www.w3.org/2000/svg";
+function el(name, attrs) {
+  const node = document.createElementNS(NS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+}
+
+const defs = el("defs", {});
+defs.innerHTML = `
+  <filter id="stoneShadow" x="-60%" y="-60%" width="220%" height="220%">
+    <feDropShadow dx="0.03" dy="0.09" stdDeviation="0.10" flood-color="#000" flood-opacity="0.5"/>
+  </filter>
+`;
+svg.appendChild(defs);
+
+// board layer: one polygon per cell
+const boardG = el("g", {});
+for (const c of cells) {
+  const pts = c.pentagon.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(" ");
+  const poly = el("polygon", {
+    class: "cell",
+    "data-id": c.id,
+    points: pts,
+    fill: CELL_COLOUR[c.colour],
+    stroke: "#3a3f4a",
+    "stroke-width": 0.025,
+    "stroke-linejoin": "round",
+  });
+  boardG.appendChild(poly);
+}
+svg.appendChild(boardG);
+
+// stones layer (pointer-events none so clicks always reach the pentagon below)
+const stonesG = el("g", { filter: "url(#stoneShadow)", "pointer-events": "none" });
+svg.appendChild(stonesG);
+
+function renderStones() {
+  stonesG.innerHTML = "";
+  for (const c of cells) {
+    const s = stones[c.id];
+    if (!s) continue;
+    const spec = STONES[s];
+    const g = el("g", {});
+    const base = el("circle", { cx: c.x, cy: c.y, r: 0.42, fill: spec.base, stroke: "#0e0f13", "stroke-width": 0.03 });
+    g.appendChild(base);
+    stonesG.appendChild(g);
+  }
+  updateStatus();
+}
+
+function updateStatus() {
+  const counts = {};
+  for (const s of stones) if (s) counts[s] = (counts[s] || 0) + 1;
+  const total = stones.filter(Boolean).length;
+  const parts = Object.entries(STONES).map(([k, v]) =>
+    `${v.name} <b>${counts[k] || 0}</b>`);
+  document.getElementById("status").innerHTML = `${parts.join(" &nbsp;·&nbsp; ")} &nbsp;·&nbsp; Total <b>${total}</b>/48`;
+}
+
+// ---- interactions ----
+svg.addEventListener("click", (e) => {
+  const target = e.target;
+  if (!(target instanceof SVGElement)) return;
+  const poly = target.closest ? target.closest(".cell") : null;
+  if (!poly) return;
+  const id = Number(poly.getAttribute("data-id"));
+  stones[id] = stones[id] === selectedColour ? null : selectedColour;
+  renderStones();
+});
+
+function buildStoneButtons() {
+  const wrap = document.getElementById("stoneButtons");
+  wrap.innerHTML = "";
+  for (const [k, v] of Object.entries(STONES)) {
+    const btn = document.createElement("button");
+    btn.className = "stone-btn" + (k === selectedColour ? " active" : "");
+    btn.title = v.name;
+    btn.innerHTML = `<span class="chip" style="background:${v.base};"></span>`;
+    btn.addEventListener("click", () => {
+      selectedColour = k;
+      for (const b of wrap.children) b.classList.remove("active");
+      btn.classList.add("active");
+    });
+    wrap.appendChild(btn);
+  }
+}
+buildStoneButtons();
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  stones.fill(null);
+  renderStones();
+});
+
+renderStones();
+</script>
+</body>
+</html>
