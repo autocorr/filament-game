@@ -137,6 +137,16 @@
 <div class="controls">
   <span class="label">Turn</span>
   <div id="stoneButtons" style="display:flex;gap:8px;"></div>
+  <span class="label" style="margin-left:6px;">P1</span>
+  <select id="p1Type" class="reset-btn" style="padding:8px 10px;">
+    <option value="human" selected>Human</option>
+    <option value="ai">AI</option>
+  </select>
+  <span class="label" style="margin-left:6px;">P2</span>
+  <select id="p2Type" class="reset-btn" style="padding:8px 10px;">
+    <option value="human">Human</option>
+    <option value="ai" selected>AI</option>
+  </select>
   <span class="label" style="margin-left:6px;">AI think</span>
   <select id="aiTime" class="reset-btn" style="padding:8px 10px;">
     <option value="0.1">0.1s</option>
@@ -145,12 +155,6 @@
     <option value="1" selected>1s</option>
     <option value="2">2s</option>
     <option value="5">5s</option>
-  </select>
-  <button id="aiToggle" class="reset-btn">AI: On</button>
-  <span class="label" style="margin-left:6px;">First</span>
-  <select id="firstPlayer" class="reset-btn" style="padding:8px 10px;">
-    <option value="human" selected>You</option>
-    <option value="ai">AI</option>
   </select>
   <button id="paletteBtn" class="reset-btn">Style: Classic</button>
   <button id="resetBtn" class="reset-btn">Reset board</button>
@@ -174,8 +178,9 @@
   and repeat until no such local majorities remain on the board. When the board
   is full, the player with the most groups wins; ties go to the player with the
   largest single group, and any remaining tie goes to the player who placed the
-  final stone. Use the controls above to choose who moves first and how long
-  the AI (which uses UCT Monte Carlo tree search) thinks.
+  final stone. Set P1 (Black, who always moves first) and P2 independently to
+  Human or AI above; the AI uses UCT Monte Carlo tree search with an adjustable
+  thinking time.
 </footer>
 
 <script>
@@ -193,10 +198,9 @@ let palette = "classic";
 let currentPlayer = 1;
 let lastPlayer = 0;
 let gameOver = false;
-let humanPlayer = 1;
-let aiPlayer = 2;
-let aiEnabled = true;
+const agentType = { 1: "human", 2: "ai" };
 let aiThinking = false;
+let aiGeneration = 0;
 const stones = new Array(48).fill(0);
 
 const CELLS = [
@@ -551,17 +555,25 @@ function playMove(id) {
   else currentPlayer = 3 - currentPlayer;
   renderStones();
   buildTurnIndicator();
-  maybeAiTurn();
+  maybeAgentTurn();
 }
 
-function maybeAiTurn() {
-  if (gameOver || !aiEnabled || currentPlayer !== aiPlayer) return;
+function maybeAgentTurn() {
+  if (gameOver || aiThinking) return;
+  const player = currentPlayer;
+  if (agentType[player] !== "ai") return;
   aiThinking = true;
-  document.getElementById("status").innerHTML = "<b>AI is thinking…</b>";
+  const gen = ++aiGeneration;
+  document.getElementById("status").innerHTML =
+    `<b>${PALETTES[palette][player].name} (AI) is thinking…</b>`;
   setTimeout(() => {
-    if (!aiEnabled || gameOver || currentPlayer !== aiPlayer) { aiThinking = false; return; }
+    if (gen !== aiGeneration) return;
+    if (gameOver || agentType[player] !== "ai" || currentPlayer !== player) {
+      aiThinking = false;
+      return;
+    }
     const seconds = parseFloat(document.getElementById("aiTime").value) || 0;
-    const move = mctsSearch(stones, aiPlayer, seconds * 1000, lastPlayer);
+    const move = mctsSearch(stones, player, seconds * 1000, lastPlayer);
     aiThinking = false;
     if (move >= 0) playMove(move);
   }, 20);
@@ -573,7 +585,7 @@ svg.addEventListener("click", (e) => {
   const poly = target.closest ? target.closest(".cell") : null;
   if (!poly) return;
   if (aiThinking || gameOver) return;
-  if (aiEnabled && currentPlayer !== humanPlayer) return;
+  if (agentType[currentPlayer] !== "human") return;
   playMove(Number(poly.getAttribute("data-id")));
 });
 
@@ -599,32 +611,34 @@ document.getElementById("paletteBtn").addEventListener("click", () => {
   buildTurnIndicator();
 });
 
-document.getElementById("aiToggle").addEventListener("click", () => {
-  aiEnabled = !aiEnabled;
-  document.getElementById("aiToggle").textContent = "AI: " + (aiEnabled ? "On" : "Off");
-  if (aiEnabled) maybeAiTurn();
+document.getElementById("p1Type").addEventListener("change", (e) => {
+  agentType[1] = e.target.value;
+  resetGame();
+});
+
+document.getElementById("p2Type").addEventListener("change", (e) => {
+  agentType[2] = e.target.value;
+  resetGame();
 });
 
 function resetGame() {
   stones.fill(0);
-  currentPlayer = 1;
+  currentPlayer = 1;   // Black (P1) always moves first
   lastPlayer = 0;
   gameOver = false;
   aiThinking = false;
+  aiGeneration++;      // invalidate any pending AI move
   renderStones();
   buildTurnIndicator();
-  maybeAiTurn();
+  maybeAgentTurn();
 }
-
-document.getElementById("firstPlayer").addEventListener("change", (e) => {
-  if (e.target.value === "ai") { humanPlayer = 2; aiPlayer = 1; }
-  else { humanPlayer = 1; aiPlayer = 2; }
-  resetGame();
-});
 
 document.getElementById("resetBtn").addEventListener("click", resetGame);
 
+agentType[1] = document.getElementById("p1Type").value;
+agentType[2] = document.getElementById("p2Type").value;
 renderStones();
+maybeAgentTurn();
 </script>
 </body>
 </html>
