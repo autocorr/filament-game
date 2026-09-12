@@ -95,12 +95,15 @@
 
   .status {
     margin-top: 14px;
-    font-size: 13px;
+    font-size: 17px;
+    line-height: 1.5;
     color: var(--text-dim);
     text-align: center;
     min-height: 18px;
   }
   .status b { color: var(--text); font-weight: 600; }
+  .status .verdict { font-size: 24px; color: var(--text); letter-spacing: 0.02em; }
+  .status .scoreline { font-size: 14px; margin-top: 6px; color: var(--text-dim); }
 
   .legend {
     margin-top: 14px;
@@ -129,12 +132,27 @@
 
 <header>
   <h1>PENTAFLIP</h1>
-  <div class="sub">Cairo-48 · an all-odd Cairo pentagonal board with the canonical 3-colouring</div>
 </header>
 
 <div class="controls">
-  <span class="label">Stone</span>
+  <span class="label">Turn</span>
   <div id="stoneButtons" style="display:flex;gap:8px;"></div>
+  <span class="label" style="margin-left:6px;">AI think</span>
+  <select id="aiTime" class="reset-btn" style="padding:8px 10px;">
+    <option value="0.1">0.1s</option>
+    <option value="0.25">0.25s</option>
+    <option value="0.5">0.5s</option>
+    <option value="1" selected>1s</option>
+    <option value="2">2s</option>
+    <option value="5">5s</option>
+  </select>
+  <button id="aiToggle" class="reset-btn">AI: On</button>
+  <span class="label" style="margin-left:6px;">First</span>
+  <select id="firstPlayer" class="reset-btn" style="padding:8px 10px;">
+    <option value="human" selected>You</option>
+    <option value="ai">AI</option>
+  </select>
+  <button id="paletteBtn" class="reset-btn">Style: Classic</button>
   <button id="resetBtn" class="reset-btn">Reset board</button>
 </div>
 
@@ -150,15 +168,36 @@
   <span><i class="swatch" style="background:#bcccee;"></i> C</span>
 </div>
 
+<footer>
+  Players alternate placing a stone of their color on an empty cell. If a local
+  majority (3/5 or 2/3) is created, then fill that cell with the opposite color
+  and repeat until no such local majorities remain on the board. When the board
+  is full, the player with the most groups wins; ties go to the player with the
+  largest single group, and any remaining tie goes to the player who placed the
+  final stone. Use the controls above to choose who moves first and how long
+  the AI (which uses UCT Monte Carlo tree search) thinks.
+</footer>
+
 <script>
-const STONES = {
-  black: { base: "#202329", name: "Black" },
-  white: { base: "#f2f2f0", name: "White" },
-  red:   { base: "#d4504b", name: "Red" },
-  blue:  { base: "#4a74d6", name: "Blue" },
+const PALETTES = {
+  classic: {
+    1: { base: "#202329", name: "Black" },
+    2: { base: "#f2f2f0", name: "White" },
+  },
+  vivid: {
+    1: { base: "#d4504b", name: "Red" },
+    2: { base: "#4a74d6", name: "Blue" },
+  },
 };
-let selectedColour = "black";
-const stones = new Array(48).fill(null);
+let palette = "classic";
+let currentPlayer = 1;
+let lastPlayer = 0;
+let gameOver = false;
+let humanPlayer = 1;
+let aiPlayer = 2;
+let aiEnabled = true;
+let aiThinking = false;
+const stones = new Array(48).fill(0);
 
 const CELLS = [
   [0,-2.3660,-2.7321,"C"],[1,-2.8660,-1.8660,"A"],[2,-0.5000,-3.2321,"C"],[3,-1.5000,-3.2321,"B"],
@@ -240,6 +279,15 @@ function buildCells() {
 }
 
 const cells = buildCells();
+
+// cells are adjacent iff their centres are exactly one unit apart
+const NEIGHBOURS = {};
+for (const c of cells) {
+  NEIGHBOURS[c.id] = cells
+    .filter((o) => o.id !== c.id && Math.abs(Math.hypot(o.x - c.x, o.y - c.y) - 1) < 1e-3)
+    .map((o) => o.id);
+}
+
 const svg = document.getElementById("board");
 
 // compute viewBox from pentagon bounds with padding
@@ -292,7 +340,7 @@ function renderStones() {
   for (const c of cells) {
     const s = stones[c.id];
     if (!s) continue;
-    const spec = STONES[s];
+    const spec = PALETTES[palette][s];
     const g = el("g", {});
     const base = el("circle", { cx: c.x, cy: c.y, r: 0.42, fill: spec.base, stroke: "#0e0f13", "stroke-width": 0.03 });
     g.appendChild(base);
@@ -301,48 +349,280 @@ function renderStones() {
   updateStatus();
 }
 
+// ---- game rules ----
+// A cell is filled with the minority colour once a strict majority of its
+// neighbours (3+ of 5, or 2+ of 3) are stones of the other colour. Fills
+// cascade until no empty cell has such a local majority, ending the turn.
+function flipColourOn(board, id) {
+  const nbrs = NEIGHBOURS[id];
+  let c1 = 0, c2 = 0;
+  for (const n of nbrs) {
+    if (board[n] === 1) c1++;
+    else if (board[n] === 2) c2++;
+  }
+  const majority = c1 > c2 ? 1 : c2 > c1 ? 2 : 0;
+  if (!majority) return 0;
+  const threshold = nbrs.length === 5 ? 3 : 2;
+  if ((majority === 1 ? c1 : c2) < threshold) return 0;
+  return 3 - majority;
+}
+
+function applyMoveOn(board, id, player) {
+  board[id] = player;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const fills = [];
+    for (const c of cells) {
+      if (board[c.id]) continue;
+      const colour = flipColourOn(board, c.id);
+      if (colour) fills.push([c.id, colour]);
+    }
+    for (const [i, colour] of fills) board[i] = colour;
+    if (fills.length) changed = true;
+  }
+}
+
+function emptyCells(board) {
+  const out = [];
+  for (const c of cells) if (!board[c.id]) out.push(c.id);
+  return out;
+}
+
+function isFullBoard(board) {
+  for (const c of cells) if (!board[c.id]) return false;
+  return true;
+}
+
+function groupStats(board, player) {
+  const seen = new Set();
+  let count = 0, largest = 0;
+  for (const c of cells) {
+    if (board[c.id] !== player || seen.has(c.id)) continue;
+    let size = 0;
+    const stack = [c.id];
+    seen.add(c.id);
+    while (stack.length) {
+      const cur = stack.pop();
+      size++;
+      for (const n of NEIGHBOURS[cur]) {
+        if (!seen.has(n) && board[n] === player) { seen.add(n); stack.push(n); }
+      }
+    }
+    count++;
+    if (size > largest) largest = size;
+  }
+  return { count, largest };
+}
+
+function decideWinner(board, last) {
+  const a = groupStats(board, 1), b = groupStats(board, 2);
+  if (a.count !== b.count) return a.count > b.count ? 1 : 2;
+  if (a.largest !== b.largest) return a.largest > b.largest ? 1 : 2;
+  return last || 1;
+}
+
+function playerGroups(player) {
+  return groupStats(stones, player);
+}
+
+function winner() {
+  return decideWinner(stones, lastPlayer);
+}
+
 function updateStatus() {
-  const counts = {};
-  for (const s of stones) if (s) counts[s] = (counts[s] || 0) + 1;
+  const name = (p) => (PALETTES[palette][p] ? PALETTES[palette][p].name : "—");
+  const a = playerGroups(1), b = playerGroups(2);
+  if (gameOver) {
+    const w = winner();
+    const plural = (n) => (n === 1 ? "group" : "groups");
+    document.getElementById("status").innerHTML =
+      `<div class="verdict"><b>Game over</b> &nbsp;·&nbsp; <b>${name(w)} wins</b></div>` +
+      `<div class="scoreline">` +
+        `${name(1)}: <b>${a.count}</b> ${plural(a.count)}, largest <b>${a.largest}</b>` +
+        ` &nbsp;·&nbsp; ${name(2)}: <b>${b.count}</b> ${plural(b.count)}, largest <b>${b.largest}</b>` +
+        ` &nbsp;·&nbsp; Last to move: <b>${name(lastPlayer)}</b>` +
+      `</div>`;
+    return;
+  }
   const total = stones.filter(Boolean).length;
-  const parts = Object.entries(STONES).map(([k, v]) =>
-    `${v.name} <b>${counts[k] || 0}</b>`);
-  document.getElementById("status").innerHTML = `${parts.join(" &nbsp;·&nbsp; ")} &nbsp;·&nbsp; Total <b>${total}</b>/48`;
+  document.getElementById("status").innerHTML =
+    `${name(1)}: <b>${a.count}</b> groups &nbsp;·&nbsp; ${name(2)}: <b>${b.count}</b> groups` +
+    ` &nbsp;·&nbsp; ${name(currentPlayer)} to play &nbsp;·&nbsp; Total <b>${total}</b>/48`;
+}
+
+// ---- UCT / Monte Carlo Tree Search ----
+const MCTS_C = Math.SQRT2;
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function makeNode(board, toMove, parent, move, lastMover) {
+  return {
+    board: board.slice(),
+    toMove,
+    parent,
+    move,
+    lastMover,
+    visits: 0,
+    wins: 0,
+    children: [],
+    untried: shuffle(emptyCells(board)),
+  };
+}
+
+function bestUCT(node) {
+  const logN = Math.log(node.visits);
+  let best = null, bestValue = -Infinity;
+  for (const child of node.children) {
+    const exploit = child.wins / child.visits;
+    const explore = MCTS_C * Math.sqrt(logN / child.visits);
+    const value = exploit + explore;
+    if (value > bestValue) { bestValue = value; best = child; }
+  }
+  return best;
+}
+
+function selectAndExpand(root) {
+  let node = root;
+  for (;;) {
+    if (node.untried.length) {
+      const id = node.untried.pop();
+      const board = node.board.slice();
+      applyMoveOn(board, id, node.toMove);
+      const child = makeNode(board, 3 - node.toMove, node, id, node.toMove);
+      node.children.push(child);
+      return child;
+    }
+    if (!node.children.length) return node;
+    node = bestUCT(node);
+  }
+}
+
+function simulate(board, toMove, lastMover) {
+  const b = board.slice();
+  let player = toMove;
+  let last = lastMover;
+  let empties = emptyCells(b);
+  while (empties.length) {
+    const id = empties[(Math.random() * empties.length) | 0];
+    applyMoveOn(b, id, player);
+    last = player;
+    empties = emptyCells(b);
+    player = 3 - player;
+  }
+  return decideWinner(b, last);
+}
+
+function backpropagate(node, winnerPlayer) {
+  while (node) {
+    node.visits++;
+    if (node.parent && node.parent.toMove === winnerPlayer) node.wins++;
+    node = node.parent;
+  }
+}
+
+function mctsSearch(board, player, timeMs, lastMover) {
+  const root = makeNode(board, player, null, null, lastMover);
+  const deadline = performance.now() + Math.max(0, timeMs);
+  do {
+    const leaf = selectAndExpand(root);
+    backpropagate(leaf, simulate(leaf.board, leaf.toMove, leaf.lastMover));
+  } while (performance.now() < deadline);
+
+  let best = null, bestVisits = -1;
+  for (const child of root.children) {
+    if (child.visits > bestVisits) { bestVisits = child.visits; best = child; }
+  }
+  return best ? best.move : -1;
 }
 
 // ---- interactions ----
+function playMove(id) {
+  if (gameOver || stones[id]) return;
+  lastPlayer = currentPlayer;
+  applyMoveOn(stones, id, currentPlayer);
+  if (isFullBoard(stones)) gameOver = true;
+  else currentPlayer = 3 - currentPlayer;
+  renderStones();
+  buildTurnIndicator();
+  maybeAiTurn();
+}
+
+function maybeAiTurn() {
+  if (gameOver || !aiEnabled || currentPlayer !== aiPlayer) return;
+  aiThinking = true;
+  document.getElementById("status").innerHTML = "<b>AI is thinking…</b>";
+  setTimeout(() => {
+    if (!aiEnabled || gameOver || currentPlayer !== aiPlayer) { aiThinking = false; return; }
+    const seconds = parseFloat(document.getElementById("aiTime").value) || 0;
+    const move = mctsSearch(stones, aiPlayer, seconds * 1000, lastPlayer);
+    aiThinking = false;
+    if (move >= 0) playMove(move);
+  }, 20);
+}
+
 svg.addEventListener("click", (e) => {
   const target = e.target;
   if (!(target instanceof SVGElement)) return;
   const poly = target.closest ? target.closest(".cell") : null;
   if (!poly) return;
-  const id = Number(poly.getAttribute("data-id"));
-  stones[id] = stones[id] === selectedColour ? null : selectedColour;
-  renderStones();
+  if (aiThinking || gameOver) return;
+  if (aiEnabled && currentPlayer !== humanPlayer) return;
+  playMove(Number(poly.getAttribute("data-id")));
 });
 
-function buildStoneButtons() {
+function buildTurnIndicator() {
   const wrap = document.getElementById("stoneButtons");
   wrap.innerHTML = "";
-  for (const [k, v] of Object.entries(STONES)) {
+  for (const p of [1, 2]) {
+    const spec = PALETTES[palette][p];
     const btn = document.createElement("button");
-    btn.className = "stone-btn" + (k === selectedColour ? " active" : "");
-    btn.title = v.name;
-    btn.innerHTML = `<span class="chip" style="background:${v.base};"></span>`;
-    btn.addEventListener("click", () => {
-      selectedColour = k;
-      for (const b of wrap.children) b.classList.remove("active");
-      btn.classList.add("active");
-    });
+    btn.className = "stone-btn" + (!gameOver && p === currentPlayer ? " active" : "");
+    btn.title = spec.name;
+    btn.innerHTML = `<span class="chip" style="background:${spec.base};"></span>`;
     wrap.appendChild(btn);
   }
+  document.getElementById("paletteBtn").textContent =
+    "Style: " + (palette === "classic" ? "Classic" : "Vivid");
 }
-buildStoneButtons();
+buildTurnIndicator();
 
-document.getElementById("resetBtn").addEventListener("click", () => {
-  stones.fill(null);
+document.getElementById("paletteBtn").addEventListener("click", () => {
+  palette = palette === "classic" ? "vivid" : "classic";
   renderStones();
+  buildTurnIndicator();
 });
+
+document.getElementById("aiToggle").addEventListener("click", () => {
+  aiEnabled = !aiEnabled;
+  document.getElementById("aiToggle").textContent = "AI: " + (aiEnabled ? "On" : "Off");
+  if (aiEnabled) maybeAiTurn();
+});
+
+function resetGame() {
+  stones.fill(0);
+  currentPlayer = 1;
+  lastPlayer = 0;
+  gameOver = false;
+  aiThinking = false;
+  renderStones();
+  buildTurnIndicator();
+  maybeAiTurn();
+}
+
+document.getElementById("firstPlayer").addEventListener("change", (e) => {
+  if (e.target.value === "ai") { humanPlayer = 2; aiPlayer = 1; }
+  else { humanPlayer = 1; aiPlayer = 2; }
+  resetGame();
+});
+
+document.getElementById("resetBtn").addEventListener("click", resetGame);
 
 renderStones();
 </script>
