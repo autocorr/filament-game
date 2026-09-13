@@ -149,6 +149,8 @@
   </select>
   <span class="label" style="margin-left:6px;">AI think</span>
   <select id="aiTime" class="reset-btn" style="padding:8px 10px;">
+    <option value="0.025">0.025s</option>
+    <option value="0.05">0.05s</option>
     <option value="0.1">0.1s</option>
     <option value="0.25">0.25s</option>
     <option value="0.5">0.5s</option>
@@ -156,7 +158,11 @@
     <option value="2">2s</option>
     <option value="5">5s</option>
   </select>
-  <button id="paletteBtn" class="reset-btn">Style: Classic</button>
+  <span class="label" style="margin-left:6px;">Rules</span>
+  <select id="ruleset" class="reset-btn" style="padding:8px 10px;">
+    <option value="most" selected>Most groups</option>
+    <option value="least">Least groups</option>
+  </select>
   <button id="resetBtn" class="reset-btn">Reset board</button>
 </div>
 
@@ -176,25 +182,19 @@
   Players alternate placing a stone of their color on an empty cell. If a local
   majority (3/5 or 2/3) is created, then fill that cell with the opposite color
   and repeat until no such local majorities remain on the board. When the board
-  is full, the player with the most groups wins; ties go to the player with the
+  is full, <span id="rulesDesc">the player with the most groups wins; ties go to the player with the
   largest single group, and any remaining tie goes to the player who placed the
-  final stone. Set P1 (Black, who always moves first) and P2 independently to
+  final stone.</span> Set P1 (Black, who always moves first) and P2 independently to
   Human or AI above; the AI uses UCT Monte Carlo tree search with an adjustable
   thinking time.
 </footer>
 
 <script>
-const PALETTES = {
-  classic: {
-    1: { base: "#202329", name: "Black" },
-    2: { base: "#f2f2f0", name: "White" },
-  },
-  vivid: {
-    1: { base: "#d4504b", name: "Red" },
-    2: { base: "#4a74d6", name: "Blue" },
-  },
+const STONES = {
+  1: { base: "#202329", name: "Black" },
+  2: { base: "#f2f2f0", name: "White" },
 };
-let palette = "classic";
+let ruleset = "most";
 let currentPlayer = 1;
 let lastPlayer = 0;
 let gameOver = false;
@@ -344,7 +344,7 @@ function renderStones() {
   for (const c of cells) {
     const s = stones[c.id];
     if (!s) continue;
-    const spec = PALETTES[palette][s];
+    const spec = STONES[s];
     const g = el("g", {});
     const base = el("circle", { cx: c.x, cy: c.y, r: 0.42, fill: spec.base, stroke: "#0e0f13", "stroke-width": 0.03 });
     g.appendChild(base);
@@ -400,7 +400,7 @@ function isFullBoard(board) {
 
 function groupStats(board, player) {
   const seen = new Set();
-  let count = 0, largest = 0;
+  const sizes = [];
   for (const c of cells) {
     if (board[c.id] !== player || seen.has(c.id)) continue;
     let size = 0;
@@ -413,15 +413,23 @@ function groupStats(board, player) {
         if (!seen.has(n) && board[n] === player) { seen.add(n); stack.push(n); }
       }
     }
-    count++;
-    if (size > largest) largest = size;
+    sizes.push(size);
   }
-  return { count, largest };
+  sizes.sort((x, y) => y - x);
+  return { count: sizes.length, largest: sizes[0] || 0, sizes };
 }
 
 function decideWinner(board, last) {
   const a = groupStats(board, 1), b = groupStats(board, 2);
-  if (a.count !== b.count) return a.count > b.count ? 1 : 2;
+  let cmp = a.count - b.count;
+  if (ruleset === "least") cmp = -cmp;
+  if (cmp !== 0) return cmp > 0 ? 1 : 2;
+  if (ruleset === "least") {
+    for (let i = 0; i < a.count; i++) {
+      if (a.sizes[i] !== b.sizes[i]) return a.sizes[i] < b.sizes[i] ? 1 : 2;
+    }
+    return 0;
+  }
   if (a.largest !== b.largest) return a.largest > b.largest ? 1 : 2;
   return last || 1;
 }
@@ -435,13 +443,14 @@ function winner() {
 }
 
 function updateStatus() {
-  const name = (p) => (PALETTES[palette][p] ? PALETTES[palette][p].name : "—");
+  const name = (p) => (STONES[p] ? STONES[p].name : "—");
   const a = playerGroups(1), b = playerGroups(2);
   if (gameOver) {
     const w = winner();
     const plural = (n) => (n === 1 ? "group" : "groups");
+    const verdict = w === 0 ? "<b>Draw</b>" : `<b>${name(w)} wins</b>`;
     document.getElementById("status").innerHTML =
-      `<div class="verdict"><b>Game over</b> &nbsp;·&nbsp; <b>${name(w)} wins</b></div>` +
+      `<div class="verdict"><b>Game over</b> &nbsp;·&nbsp; ${verdict}</div>` +
       `<div class="scoreline">` +
         `${name(1)}: <b>${a.count}</b> ${plural(a.count)}, largest <b>${a.largest}</b>` +
         ` &nbsp;·&nbsp; ${name(2)}: <b>${b.count}</b> ${plural(b.count)}, largest <b>${b.largest}</b>` +
@@ -526,7 +535,9 @@ function simulate(board, toMove, lastMover) {
 function backpropagate(node, winnerPlayer) {
   while (node) {
     node.visits++;
-    if (node.parent && node.parent.toMove === winnerPlayer) node.wins++;
+    if (node.parent && (winnerPlayer === 0 || node.parent.toMove === winnerPlayer)) {
+      node.wins += winnerPlayer === 0 ? 0.5 : 1;
+    }
     node = node.parent;
   }
 }
@@ -565,7 +576,7 @@ function maybeAgentTurn() {
   aiThinking = true;
   const gen = ++aiGeneration;
   document.getElementById("status").innerHTML =
-    `<b>${PALETTES[palette][player].name} (AI) is thinking…</b>`;
+    `<b>${STONES[player].name} (AI) is thinking…</b>`;
   setTimeout(() => {
     if (gen !== aiGeneration) return;
     if (gameOver || agentType[player] !== "ai" || currentPlayer !== player) {
@@ -593,23 +604,15 @@ function buildTurnIndicator() {
   const wrap = document.getElementById("stoneButtons");
   wrap.innerHTML = "";
   for (const p of [1, 2]) {
-    const spec = PALETTES[palette][p];
+    const spec = STONES[p];
     const btn = document.createElement("button");
     btn.className = "stone-btn" + (!gameOver && p === currentPlayer ? " active" : "");
     btn.title = spec.name;
     btn.innerHTML = `<span class="chip" style="background:${spec.base};"></span>`;
     wrap.appendChild(btn);
   }
-  document.getElementById("paletteBtn").textContent =
-    "Style: " + (palette === "classic" ? "Classic" : "Vivid");
 }
 buildTurnIndicator();
-
-document.getElementById("paletteBtn").addEventListener("click", () => {
-  palette = palette === "classic" ? "vivid" : "classic";
-  renderStones();
-  buildTurnIndicator();
-});
 
 document.getElementById("p1Type").addEventListener("change", (e) => {
   agentType[1] = e.target.value;
@@ -618,6 +621,21 @@ document.getElementById("p1Type").addEventListener("change", (e) => {
 
 document.getElementById("p2Type").addEventListener("change", (e) => {
   agentType[2] = e.target.value;
+  resetGame();
+});
+
+const RULES_DESC = {
+  most: "the player with the most groups wins; ties go to the player with the largest single group, and any remaining tie goes to the player who placed the final stone.",
+  least: "the player with the fewest groups wins; ties compare the two players' group sizes from largest to smallest, the player with the smaller group winning the first difference; if the group sizes are identical the game is a draw.",
+};
+
+function updateRulesDesc() {
+  document.getElementById("rulesDesc").textContent = RULES_DESC[ruleset];
+}
+
+document.getElementById("ruleset").addEventListener("change", (e) => {
+  ruleset = e.target.value;
+  updateRulesDesc();
   resetGame();
 });
 
@@ -637,6 +655,8 @@ document.getElementById("resetBtn").addEventListener("click", resetGame);
 
 agentType[1] = document.getElementById("p1Type").value;
 agentType[2] = document.getElementById("p2Type").value;
+ruleset = document.getElementById("ruleset").value;
+updateRulesDesc();
 renderStones();
 maybeAgentTurn();
 </script>
