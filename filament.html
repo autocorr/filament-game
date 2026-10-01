@@ -73,6 +73,14 @@
   }
   .reset-btn:hover { background: #2c313b; }
 
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--gap);
+    width: 100%;
+  }
+
   .board-wrap {
     --wrap-pad: 14px;
     background: var(--panel);
@@ -177,7 +185,9 @@
   .rules-ruleset .label { flex: 1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
   .rules-dialog .rules-close { margin: 6px 0 0; display: block; width: 100%; }
 
-  @media (max-width: 640px) {
+  /* Narrow or short screens: the desktop overlay title/scoreboard would cover
+     playable cells, so flow them above the board instead. */
+  @media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
     .board-wrap { --wrap-pad: 10px; }
     .board-header { position: static; margin-bottom: 8px; }
     .turn-panel {
@@ -187,6 +197,19 @@
       background: none;
       border: none;
     }
+  }
+
+  /* Landscape phones are height-starved, so move the controls into a left
+     sidebar to give the board the full height. */
+  @media (orientation: landscape) and (max-height: 500px) {
+    body { flex-direction: row; align-items: flex-start; }
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+      align-self: center;
+      padding: 8px;
+    }
+    .stage { flex: 1 1 auto; width: auto; min-width: 0; }
   }
 </style>
 </head>
@@ -198,15 +221,17 @@
   <button id="resetBtn" class="reset-btn">Reset</button>
 </div>
 
-<div class="board-wrap">
-  <div class="board-header">
-    <div id="turnPanel" class="turn-panel"></div>
-    <div class="board-title">FILAMENT</div>
+<div class="stage">
+  <div class="board-wrap">
+    <div class="board-header">
+      <div id="turnPanel" class="turn-panel"></div>
+      <div class="board-title">FILAMENT</div>
+    </div>
+    <svg id="board" class="board" viewBox="0 0 100 100"></svg>
   </div>
-  <svg id="board" class="board" viewBox="0 0 100 100"></svg>
-</div>
 
-<div id="status" class="status"></div>
+  <div id="status" class="status"></div>
+</div>
 
 <dialog id="rulesDialog" class="rules-dialog">
   <h2>Rules</h2>
@@ -1068,8 +1093,8 @@ let lastBoardMax = -1;
 function fitBoard() {
   const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
   const bodyStyle = getComputedStyle(document.body);
-  const gap = parseFloat(bodyStyle.rowGap) || 0;
   const bottomPad = parseFloat(bodyStyle.paddingBottom) || 0;
+  const gap = parseFloat(getComputedStyle(ui.stage).rowGap) || 0;
   const wrapStyle = getComputedStyle(ui.boardWrap);
   const wrapBottom = (parseFloat(wrapStyle.paddingBottom) || 0) + (parseFloat(wrapStyle.borderBottomWidth) || 0);
   const statusH = ui.status.getBoundingClientRect().height;
@@ -1091,6 +1116,7 @@ function setupBoardFit() {
 function initApp() {
   ui.board = document.getElementById("board");
   ui.status = document.getElementById("status");
+  ui.stage = document.querySelector(".stage");
   ui.boardWrap = document.querySelector(".board-wrap");
   ui.turnPanel = document.getElementById("turnPanel");
   ui.aiTime = document.getElementById("aiTime");
