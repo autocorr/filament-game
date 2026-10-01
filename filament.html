@@ -56,7 +56,6 @@
   }
   .controls .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-right: 2px; }
   .reset-btn {
-    margin-left: 6px;
     background: var(--panel-2);
     border: 1px solid var(--line);
     color: var(--text);
@@ -171,6 +170,8 @@
     gap: 8px;
     margin-bottom: 14px;
   }
+  .rules-ruleset .label { flex: 1; }
+  .rules-ruleset .reset-btn { padding: 6px 10px; margin-left: 0; }
   .rules-ruleset .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
   .rules-dialog .rules-desc { color: var(--text); }
   .rules-dialog .rules-close { margin: 6px 0 0; display: block; width: 100%; }
@@ -179,30 +180,8 @@
 <body>
 
 <div class="controls">
-  <button id="rulesBtn" class="reset-btn" style="margin-left:0;">Help</button>
-  <span class="label" style="margin-left:6px;">P1</span>
-  <select id="p1Type" class="reset-btn" style="padding:8px 10px;">
-    <option value="human" selected>Human</option>
-    <option value="ai">AI</option>
-  </select>
-  <span class="label" style="margin-left:6px;">P2</span>
-  <select id="p2Type" class="reset-btn" style="padding:8px 10px;">
-    <option value="human">Human</option>
-    <option value="ai" selected>AI</option>
-  </select>
-  <span class="label" style="margin-left:6px;">AI think</span>
-  <select id="aiTime" class="reset-btn" style="padding:8px 10px;">
-    <option value="0.025">0.025s</option>
-    <option value="0.05">0.05s</option>
-    <option value="0.1">0.1s</option>
-    <option value="0.25">0.25s</option>
-    <option value="0.5">0.5s</option>
-    <option value="1" selected>1s</option>
-    <option value="2">2s</option>
-    <option value="5">5s</option>
-    <option value="10">10s</option>
-    <option value="30">30s</option>
-  </select>
+  <button id="rulesBtn" class="reset-btn">Help</button>
+  <button id="menuBtn" class="reset-btn">Menu</button>
   <button id="resetBtn" class="reset-btn">Reset</button>
 </div>
 
@@ -222,23 +201,57 @@
   <p><b>Game end.</b> The game ends when the board is full. The player with fewer groups wins.</p>
   <p><b>Groups.</b> Two of your stones are in the same group if you can trace a path between them that steps only from neighbor to neighbor through your own stones. A stone with no neighbors of its color is a group by itself.</p>
   <p><b>Ties.</b> If you tie on group count, each player lists their group sizes from largest to smallest. Compare the two lists one position at a time: first the largest groups, then the second-largest, and so on. At the first position where the sizes differ, the player with the smaller group wins. If every size matches, the game is a draw.</p>
+  <button id="rulesClose" class="reset-btn rules-close">Close</button>
+</dialog>
+
+<dialog id="optionsDialog" class="rules-dialog">
+  <h2>Options</h2>
+  <div class="rules-ruleset">
+    <span class="label">Player 1</span>
+    <select id="p1Type" class="reset-btn">
+      <option value="human" selected>Human</option>
+      <option value="ai">AI</option>
+    </select>
+  </div>
+  <div class="rules-ruleset">
+    <span class="label">Player 2</span>
+    <select id="p2Type" class="reset-btn">
+      <option value="human">Human</option>
+      <option value="ai" selected>AI</option>
+    </select>
+  </div>
+  <div class="rules-ruleset">
+    <span class="label">AI think</span>
+    <select id="aiTime" class="reset-btn">
+      <option value="0.025">0.025s</option>
+      <option value="0.05">0.05s</option>
+      <option value="0.1">0.1s</option>
+      <option value="0.25">0.25s</option>
+      <option value="0.5">0.5s</option>
+      <option value="1" selected>1s</option>
+      <option value="2">2s</option>
+      <option value="5">5s</option>
+      <option value="10">10s</option>
+      <option value="30">30s</option>
+    </select>
+  </div>
   <div class="rules-ruleset">
     <span class="label">Board size</span>
-    <select id="boardSize" class="reset-btn" style="padding:6px 10px;margin-left:0;">
+    <select id="boardSize" class="reset-btn">
       <option value="48" selected>48</option>
       <option value="160">160</option>
     </select>
   </div>
   <div class="rules-ruleset">
     <span class="label">Colors</span>
-    <select id="scheme" class="reset-btn" style="padding:6px 10px;margin-left:0;">
+    <select id="scheme" class="reset-btn">
       <option value="sand" selected>Sand</option>
       <option value="gold">Gold</option>
       <option value="pastel3">Pastel</option>
       <option value="slate">Slate</option>
     </select>
   </div>
-  <button id="rulesClose" class="reset-btn rules-close">Close</button>
+  <button id="optionsClose" class="reset-btn rules-close">Close</button>
 </dialog>
 
 <script>
@@ -1023,6 +1036,14 @@ function renderSelfTestResults(summary) {
     `</div>`;
 }
 
+function wireDialog(dialog, openBtn, closeBtn) {
+  openBtn.addEventListener("click", () => dialog.showModal());
+  closeBtn.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+}
+
 function initApp() {
   ui.board = document.getElementById("board");
   ui.status = document.getElementById("status");
@@ -1033,9 +1054,12 @@ function initApp() {
   ui.scheme = document.getElementById("scheme");
   ui.boardSize = document.getElementById("boardSize");
   ui.resetBtn = document.getElementById("resetBtn");
+  ui.menuBtn = document.getElementById("menuBtn");
   ui.rulesBtn = document.getElementById("rulesBtn");
   ui.rulesClose = document.getElementById("rulesClose");
   ui.rulesDialog = document.getElementById("rulesDialog");
+  ui.optionsClose = document.getElementById("optionsClose");
+  ui.optionsDialog = document.getElementById("optionsDialog");
 
   svg = ui.board;
 
@@ -1057,11 +1081,8 @@ function initApp() {
     });
   }
 
-  ui.rulesBtn.addEventListener("click", () => ui.rulesDialog.showModal());
-  ui.rulesClose.addEventListener("click", () => ui.rulesDialog.close());
-  ui.rulesDialog.addEventListener("click", (e) => {
-    if (e.target === ui.rulesDialog) ui.rulesDialog.close();
-  });
+  wireDialog(ui.rulesDialog, ui.rulesBtn, ui.rulesClose);
+  wireDialog(ui.optionsDialog, ui.menuBtn, ui.optionsClose);
 
   ui.scheme.addEventListener("change", (e) => {
     colourScheme = e.target.value;
