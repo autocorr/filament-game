@@ -143,7 +143,7 @@
     max-width: 520px;
     width: calc(100% - 32px);
     line-height: 1.6;
-    font-size: 14px;
+    font-size: 12px;
   }
   .rules-dialog::backdrop { background: rgba(0,0,0,0.6); }
   .rules-dialog h2 {
@@ -208,16 +208,13 @@
 <div id="status" class="status"></div>
 
 <dialog id="rulesDialog" class="rules-dialog">
-  <h2>Help</h2>
-  <p>On your turn place a stone of your color on an empty cell.
-  If an empty cell has a decisive majority of stones neighboring it (i.e., 3/5
-  or 2/3) then fill that cell with the color of the minority. Repeat such
-  fills until no such local majorities remain on the board. The game ends when
-  the board is full.</p>
-  <p>The player with the fewest groups wins. Ties are broken by comparing each
-  player's groups from largest to smallest in sequence where the first player to
-  have a smaller group in the comparison wins. If all of the group sizes are
-  identical the game is a draw.</p>
+  <h2>Rules</h2>
+  <p><b>Setup.</b> Play on a patch of the Cairo pentagonal tiling where every cell has either 3 or 5 neighbors. Two cells are neighbors only if they share an edge; cells that touch only at a corner are not neighbors. The board starts empty, and Black moves first.</p>
+  <p><b>Place.</b> On your turn place a stone of your color on an empty cell.</p>
+  <p><b>Fill.</b> After a placement, determine if any neighboring empty cells have a <i>majority</i> where more than half of all its neighbors hold stones of one color: at least 3 of 5 for inner cells, or at least 2 of 3 for edge cells. Fill each such cell with a stone of the <i>opposite</i> color of the majority. Fills can create new majorities. Continue filling until none remain. Then your turn ends.</p>
+  <p><b>Game end.</b> The game ends when the board is full. The player with fewer groups wins.</p>
+  <p><b>Groups.</b> Two of your stones are in the same group if you can trace a path between them that steps only from neighbor to neighbor through your own stones. A stone with no neighbors of its color is a group by itself.</p>
+  <p><b>Ties.</b> If you tie on group count, each player lists their group sizes from largest to smallest. Compare the two lists one position at a time: first the largest groups, then the second-largest, and so on. At the first position where the sizes differ, the player with the smaller group wins. If every size matches, the game is a draw.</p>
   <div class="rules-ruleset">
     <span class="label">Board size</span>
     <select id="boardSize" class="reset-btn" style="padding:6px 10px;margin-left:0;">
