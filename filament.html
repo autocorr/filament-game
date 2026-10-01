@@ -340,6 +340,11 @@ function cellFill(c) {
 }
 
 // ---- geometry: Cairo pentagons via the snub-square lattice ----
+const ADJ_EPS = 1e-3;
+function unitApart(ax, ay, bx, by) {
+  return Math.abs(Math.hypot(ax - bx, ay - by) - 1) < ADJ_EPS;
+}
+
 function buildCells() {
   const S = (1 + Math.sqrt(3)) / 2;
   const V1 = [S * Math.cos(Math.PI / 6), S * Math.sin(Math.PI / 6)];
@@ -372,7 +377,7 @@ function buildCells() {
     const out = [];
     for (const [k2, p] of grid) {
       if (k2 === k) continue;
-      if (Math.hypot(p[0] - x, p[1] - y) < 1.05) out.push(k2);
+      if (unitApart(x, y, p[0], p[1])) out.push(k2);
     }
     return out;
   };
@@ -388,8 +393,7 @@ function buildCells() {
     for (let t = 0; t < ns.length; t++) {
       const a = ns[t], b = ns[(t + 1) % ns.length];
       const [x1, y1] = grid.get(a), [x2, y2] = grid.get(b);
-      const d = Math.hypot(x1 - x2, y1 - y2);
-      if (Math.abs(d - 1) < 1e-3) verts.push([(x0 + x1 + x2) / 3, (y0 + y1 + y2) / 3]);
+      if (unitApart(x1, y1, x2, y2)) verts.push([(x0 + x1 + x2) / 3, (y0 + y1 + y2) / 3]);
       else verts.push([(x1 + x2) / 2, (y1 + y2) / 2]);
     }
     return verts;
@@ -436,7 +440,7 @@ function loadBoard(size) {
   NEIGHBOURS = {};
   for (const c of cells) {
     NEIGHBOURS[c.id] = cells
-      .filter((o) => o.id !== c.id && Math.abs(Math.hypot(o.x - c.x, o.y - c.y) - 1) < 1e-3)
+      .filter((o) => o.id !== c.id && unitApart(c.x, c.y, o.x, o.y))
       .map((o) => o.id);
   }
 
