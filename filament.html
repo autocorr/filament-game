@@ -339,9 +339,11 @@ const BOARDS = {
 let boardSize = 48;
 let CELLS = BOARDS[boardSize];
 
-// display rotation (degrees) per board: Cairo-160 is a diamond in its native
-// orientation, so rotate it to sit as a square.
-const BOARD_ROTATE = { 48: -30, 160: -30 };
+// display rotation (degrees) per board: each patch is rotated to the
+// orientation that minimises its bounding box, so it sits as a square with as
+// little empty corner space as possible. Cairo-48 is already square when
+// native; Cairo-160 is a diamond and needs -30.
+const BOARD_ROTATE = { 48: 0, 160: -30 };
 
 const COLOR_SCHEMES = {
   pastel3: { name: "Pastel 3", A: "#f2d8a7", B: "#bcdcc6", C: "#bcccee" },
@@ -488,7 +490,7 @@ function loadBoard(size) {
     if (x < minX) minX = x; if (y < minY) minY = y;
     if (x > maxX) maxX = x; if (y > maxY) maxY = y;
   }
-  const pad = 0.35;
+  const pad = 0.15;
   const viewBox = `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`;
   return { cells, neighbours: NEIGHBOURS, byId: CELLS_BY_ID, viewBox };
 }
