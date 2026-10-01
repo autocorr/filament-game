@@ -411,6 +411,7 @@ function el(name, attrs) {
 let cells, NEIGHBOURS, cellPolys, boardG, stonesG;
 let CELLS_BY_ID = {};
 let svg;   // assigned in initApp
+const ui = {};   // DOM references cached in initApp
 
 // Pure board setup: builds cell geometry and adjacency with no DOM access, so
 // it can run under the Node test harness too. Returns the live geometry.
@@ -631,7 +632,7 @@ function updateStatus() {
     const plural = (n) => (n === 1 ? "group" : "groups");
     const verdict = w === 0 ? "<b>Draw</b>" : `<b>${name(w)} wins</b>`;
     const groups = (g) => (g.sizes.length ? g.sizes.join(" · ") : "—");
-    document.getElementById("status").innerHTML =
+    ui.status.innerHTML =
       `<div class="verdict"><b>Game over</b> &nbsp;·&nbsp; ${verdict}</div>` +
       `<div class="scoreline">` +
         `${name(1)}: <b>${a.count}</b> ${plural(a.count)} &nbsp;[${groups(a)}]` +
@@ -639,7 +640,7 @@ function updateStatus() {
       `</div>`;
     return;
   }
-  document.getElementById("status").innerHTML = "";
+  ui.status.innerHTML = "";
 }
 
 // ---- UCT / Monte Carlo Tree Search ----
@@ -750,7 +751,7 @@ function maybeAgentTurn() {
   if (agentType[player] !== "ai") return;
   aiThinking = true;
   const gen = ++aiGeneration;
-  document.getElementById("status").innerHTML =
+  ui.status.innerHTML =
     `<b>${STONES[player].name} (AI) is thinking…</b>`;
   setTimeout(() => {
     if (gen !== aiGeneration) return;
@@ -758,7 +759,7 @@ function maybeAgentTurn() {
       aiThinking = false;
       return;
     }
-    const seconds = parseFloat(document.getElementById("aiTime").value) || 0;
+    const seconds = parseFloat(ui.aiTime.value) || 0;
     const move = mctsSearch(stones, player, seconds * 1000);
     aiThinking = false;
     if (move >= 0) playMove(move);
@@ -766,7 +767,7 @@ function maybeAgentTurn() {
 }
 
 function updateTurnPanel() {
-  const wrap = document.getElementById("turnPanel");
+  const wrap = ui.turnPanel;
   wrap.innerHTML = "";
   for (const p of [1, 2]) {
     const spec = STONES[p];
@@ -1005,7 +1006,7 @@ function selfTest() {
 }
 
 function renderSelfTestResults(summary) {
-  document.getElementById("status").innerHTML =
+  ui.status.innerHTML =
     `<div class="verdict"><b>Self-test ${summary.failed ? "FAIL" : "PASS"}</b> ` +
     `&nbsp;·&nbsp; ${summary.passed}/${summary.results.length}</div>` +
     `<div class="scoreline">` +
@@ -1014,7 +1015,20 @@ function renderSelfTestResults(summary) {
 }
 
 function initApp() {
-  svg = document.getElementById("board");
+  ui.board = document.getElementById("board");
+  ui.status = document.getElementById("status");
+  ui.turnPanel = document.getElementById("turnPanel");
+  ui.aiTime = document.getElementById("aiTime");
+  ui.p1Type = document.getElementById("p1Type");
+  ui.p2Type = document.getElementById("p2Type");
+  ui.scheme = document.getElementById("scheme");
+  ui.boardSize = document.getElementById("boardSize");
+  ui.resetBtn = document.getElementById("resetBtn");
+  ui.rulesBtn = document.getElementById("rulesBtn");
+  ui.rulesClose = document.getElementById("rulesClose");
+  ui.rulesDialog = document.getElementById("rulesDialog");
+
+  svg = ui.board;
 
   svg.addEventListener("click", (e) => {
     const target = e.target;
@@ -1026,33 +1040,31 @@ function initApp() {
     playMove(Number(poly.getAttribute("data-id")));
   });
 
-  document.getElementById("p1Type").addEventListener("change", (e) => {
-    agentType[1] = e.target.value;
-    resetGame();
-  });
-  document.getElementById("p2Type").addEventListener("change", (e) => {
-    agentType[2] = e.target.value;
-    resetGame();
+  for (const p of [1, 2]) {
+    const sel = p === 1 ? ui.p1Type : ui.p2Type;
+    sel.addEventListener("change", (e) => {
+      agentType[p] = e.target.value;
+      resetGame();
+    });
+  }
+
+  ui.rulesBtn.addEventListener("click", () => ui.rulesDialog.showModal());
+  ui.rulesClose.addEventListener("click", () => ui.rulesDialog.close());
+  ui.rulesDialog.addEventListener("click", (e) => {
+    if (e.target === ui.rulesDialog) ui.rulesDialog.close();
   });
 
-  const rulesDialog = document.getElementById("rulesDialog");
-  document.getElementById("rulesBtn").addEventListener("click", () => rulesDialog.showModal());
-  document.getElementById("rulesClose").addEventListener("click", () => rulesDialog.close());
-  rulesDialog.addEventListener("click", (e) => {
-    if (e.target === rulesDialog) rulesDialog.close();
-  });
-
-  document.getElementById("scheme").addEventListener("change", (e) => {
+  ui.scheme.addEventListener("change", (e) => {
     colourScheme = e.target.value;
     applyColourScheme();
   });
-  document.getElementById("boardSize").addEventListener("change", (e) => {
+  ui.boardSize.addEventListener("change", (e) => {
     setBoard(Number(e.target.value));
   });
-  document.getElementById("resetBtn").addEventListener("click", resetGame);
+  ui.resetBtn.addEventListener("click", resetGame);
 
-  agentType[1] = document.getElementById("p1Type").value;
-  agentType[2] = document.getElementById("p2Type").value;
+  agentType[1] = ui.p1Type.value;
+  agentType[2] = ui.p2Type.value;
 
   if (location.search.includes("selftest")) {
     const summary = selfTest();
