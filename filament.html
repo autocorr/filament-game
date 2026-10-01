@@ -91,15 +91,15 @@
   .cell:hover { filter: brightness(1.15); }
 
   .status {
-    font-size: 17px;
+    font-size: clamp(14px, 3.6vw, 17px);
     line-height: 1.5;
     color: var(--text-dim);
     text-align: center;
     min-height: 18px;
   }
   .status b { color: var(--text); font-weight: 600; }
-  .status .verdict { font-size: 24px; color: var(--text); letter-spacing: 0.02em; }
-  .status .scoreline { font-size: 14px; margin-top: 6px; color: var(--text-dim); }
+  .status .verdict { font-size: clamp(17px, 5vw, 24px); color: var(--text); letter-spacing: 0.02em; }
+  .status .scoreline { font-size: clamp(12px, 3vw, 14px); margin-top: 6px; color: var(--text-dim); }
 
   .turn-panel {
     display: flex;
