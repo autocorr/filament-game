@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Filament — Cairo-48</title>
 <style>
   :root {
@@ -12,6 +12,11 @@
     --text: #e8e6e0;
     --text-dim: #9aa0ab;
     --line: #343943;
+    --gutter: clamp(8px, 2.2vw, 16px);
+    --gap: clamp(10px, 2vh, 16px);
+    --pad-top: max(clamp(12px, 2.5vw, 24px), env(safe-area-inset-top));
+    --pad-left: max(var(--gutter), env(safe-area-inset-left));
+    --pad-right: max(var(--gutter), env(safe-area-inset-right));
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -20,20 +25,29 @@
     color: var(--text);
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
     min-height: 100vh;
+    min-height: 100svh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 24px 16px 40px;
+    gap: var(--gap);
+    padding: var(--pad-top) var(--pad-right) clamp(16px, 4vw, 40px) var(--pad-left);
   }
-  .board-title {
+  .board-header {
     position: absolute;
     top: 22px;
+    left: 22px;
     right: 27px;
-    font-size: 20px;
-    letter-spacing: 0.08em;
-    font-weight: 700;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
     pointer-events: none;
     z-index: 2;
+  }
+  .board-title {
+    font-size: clamp(14px, 4.5vw, 20px);
+    letter-spacing: 0.08em;
+    font-weight: 700;
   }
 
   .controls {
@@ -42,15 +56,12 @@
     gap: 10px;
     align-items: center;
     justify-content: center;
-    margin-bottom: 16px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 12px;
     padding: 10px 14px;
   }
-  .controls .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-right: 2px; }
   .reset-btn {
-    margin-left: 6px;
     background: var(--panel-2);
     border: 1px solid var(--line);
     color: var(--text);
@@ -63,12 +74,14 @@
   .reset-btn:hover { background: #2c313b; }
 
   .board-wrap {
+    --wrap-pad: 14px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 14px;
-    padding: 14px;
+    padding: var(--wrap-pad);
     max-width: 720px;
-    width: 100%;
+    width: min(100%, calc(var(--board-max, 100vw) + 2 * var(--wrap-pad) + 2px));
+    margin-inline: auto;
     position: relative;
   }
   svg.board { width: 100%; height: auto; display: block; }
@@ -77,21 +90,17 @@
   .cell:hover { filter: brightness(1.15); }
 
   .status {
-    margin-top: 14px;
-    font-size: 17px;
+    font-size: clamp(14px, 3.6vw, 17px);
     line-height: 1.5;
     color: var(--text-dim);
     text-align: center;
     min-height: 18px;
   }
   .status b { color: var(--text); font-weight: 600; }
-  .status .verdict { font-size: 24px; color: var(--text); letter-spacing: 0.02em; }
-  .status .scoreline { font-size: 14px; margin-top: 6px; color: var(--text-dim); }
+  .status .verdict { font-size: clamp(17px, 5vw, 24px); color: var(--text); letter-spacing: 0.02em; }
+  .status .scoreline { font-size: clamp(12px, 3vw, 14px); margin-top: 6px; color: var(--text-dim); }
 
   .turn-panel {
-    position: absolute;
-    top: 22px;
-    left: 22px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -99,8 +108,6 @@
     background: rgba(20, 22, 26, 0.78);
     border: 1px solid var(--line);
     border-radius: 10px;
-    pointer-events: none;
-    z-index: 2;
   }
   .turn-row {
     display: flex;
@@ -166,44 +173,36 @@
     gap: 8px;
     margin-bottom: 14px;
   }
-  .rules-ruleset .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
-  .rules-dialog .rules-desc { color: var(--text); }
+  .rules-ruleset .reset-btn { padding: 6px 10px; }
+  .rules-ruleset .label { flex: 1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
   .rules-dialog .rules-close { margin: 6px 0 0; display: block; width: 100%; }
+
+  @media (max-width: 640px) {
+    .board-wrap { --wrap-pad: 10px; }
+    .board-header { position: static; margin-bottom: 8px; }
+    .turn-panel {
+      flex-direction: row;
+      gap: 12px;
+      padding: 4px 8px;
+      background: none;
+      border: none;
+    }
+  }
 </style>
 </head>
 <body>
 
 <div class="controls">
-  <button id="rulesBtn" class="reset-btn" style="margin-left:0;">Help</button>
-  <span class="label" style="margin-left:6px;">P1</span>
-  <select id="p1Type" class="reset-btn" style="padding:8px 10px;">
-    <option value="human" selected>Human</option>
-    <option value="ai">AI</option>
-  </select>
-  <span class="label" style="margin-left:6px;">P2</span>
-  <select id="p2Type" class="reset-btn" style="padding:8px 10px;">
-    <option value="human">Human</option>
-    <option value="ai" selected>AI</option>
-  </select>
-  <span class="label" style="margin-left:6px;">AI think</span>
-  <select id="aiTime" class="reset-btn" style="padding:8px 10px;">
-    <option value="0.025">0.025s</option>
-    <option value="0.05">0.05s</option>
-    <option value="0.1">0.1s</option>
-    <option value="0.25">0.25s</option>
-    <option value="0.5">0.5s</option>
-    <option value="1" selected>1s</option>
-    <option value="2">2s</option>
-    <option value="5">5s</option>
-    <option value="10">10s</option>
-    <option value="30">30s</option>
-  </select>
+  <button id="rulesBtn" class="reset-btn">Rules</button>
+  <button id="menuBtn" class="reset-btn">Options</button>
   <button id="resetBtn" class="reset-btn">Reset</button>
 </div>
 
 <div class="board-wrap">
-  <div class="board-title">FILAMENT</div>
-  <div id="turnPanel" class="turn-panel"></div>
+  <div class="board-header">
+    <div id="turnPanel" class="turn-panel"></div>
+    <div class="board-title">FILAMENT</div>
+  </div>
   <svg id="board" class="board" viewBox="0 0 100 100"></svg>
 </div>
 
@@ -217,23 +216,57 @@
   <p><b>Game end.</b> The game ends when the board is full. The player with fewer groups wins.</p>
   <p><b>Groups.</b> Two of your stones are in the same group if you can trace a path between them that steps only from neighbor to neighbor through your own stones. A stone with no neighbors of its color is a group by itself.</p>
   <p><b>Ties.</b> If you tie on group count, each player lists their group sizes from largest to smallest. Compare the two lists one position at a time: first the largest groups, then the second-largest, and so on. At the first position where the sizes differ, the player with the smaller group wins. If every size matches, the game is a draw.</p>
+  <button id="rulesClose" class="reset-btn rules-close">Close</button>
+</dialog>
+
+<dialog id="optionsDialog" class="rules-dialog">
+  <h2>Options</h2>
+  <div class="rules-ruleset">
+    <span class="label">Player 1</span>
+    <select id="p1Type" class="reset-btn">
+      <option value="human" selected>Human</option>
+      <option value="ai">AI</option>
+    </select>
+  </div>
+  <div class="rules-ruleset">
+    <span class="label">Player 2</span>
+    <select id="p2Type" class="reset-btn">
+      <option value="human">Human</option>
+      <option value="ai" selected>AI</option>
+    </select>
+  </div>
+  <div class="rules-ruleset">
+    <span class="label">AI think</span>
+    <select id="aiTime" class="reset-btn">
+      <option value="0.025">0.025s</option>
+      <option value="0.05">0.05s</option>
+      <option value="0.1">0.1s</option>
+      <option value="0.25">0.25s</option>
+      <option value="0.5">0.5s</option>
+      <option value="1" selected>1s</option>
+      <option value="2">2s</option>
+      <option value="5">5s</option>
+      <option value="10">10s</option>
+      <option value="30">30s</option>
+    </select>
+  </div>
   <div class="rules-ruleset">
     <span class="label">Board size</span>
-    <select id="boardSize" class="reset-btn" style="padding:6px 10px;margin-left:0;">
+    <select id="boardSize" class="reset-btn">
       <option value="48" selected>48</option>
       <option value="160">160</option>
     </select>
   </div>
   <div class="rules-ruleset">
     <span class="label">Colors</span>
-    <select id="scheme" class="reset-btn" style="padding:6px 10px;margin-left:0;">
+    <select id="scheme" class="reset-btn">
       <option value="sand" selected>Sand</option>
       <option value="gold">Gold</option>
       <option value="pastel3">Pastel</option>
       <option value="slate">Slate</option>
     </select>
   </div>
-  <button id="rulesClose" class="reset-btn rules-close">Close</button>
+  <button id="optionsClose" class="reset-btn rules-close">Close</button>
 </dialog>
 
 <script>
@@ -304,8 +337,9 @@ const BOARDS = {
 let boardSize = 48;
 let CELLS = BOARDS[boardSize];
 
-// display rotation (degrees) per board: Cairo-160 is a diamond in its native
-// orientation, so rotate it to sit as a square.
+// display rotation (degrees) per board: each patch is rotated to the
+// orientation that minimises its bounding box, so it sits as a square with as
+// little empty corner space as possible.
 const BOARD_ROTATE = { 48: -30, 160: -30 };
 
 const COLOR_SCHEMES = {
@@ -453,7 +487,7 @@ function loadBoard(size) {
     if (x < minX) minX = x; if (y < minY) minY = y;
     if (x > maxX) maxX = x; if (y > maxY) maxY = y;
   }
-  const pad = 0.35;
+  const pad = 0.15;
   const viewBox = `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`;
   return { cells, neighbours: NEIGHBOURS, byId: CELLS_BY_ID, viewBox };
 }
@@ -1018,9 +1052,46 @@ function renderSelfTestResults(summary) {
     `</div>`;
 }
 
+function wireDialog(dialog, openBtn, closeBtn) {
+  openBtn.addEventListener("click", () => dialog.showModal());
+  closeBtn.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+}
+
+// Size the board to the smaller of the available width and height so it never
+// overflows a short viewport (landscape phones, small windows) or wastes
+// vertical space. The svg's top edge sits above any board-sized element, so
+// measuring it is stable regardless of the board's own height.
+let lastBoardMax = -1;
+function fitBoard() {
+  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  const bodyStyle = getComputedStyle(document.body);
+  const gap = parseFloat(bodyStyle.rowGap) || 0;
+  const bottomPad = parseFloat(bodyStyle.paddingBottom) || 0;
+  const wrapStyle = getComputedStyle(ui.boardWrap);
+  const wrapBottom = (parseFloat(wrapStyle.paddingBottom) || 0) + (parseFloat(wrapStyle.borderBottomWidth) || 0);
+  const statusH = ui.status.getBoundingClientRect().height;
+  const boardTop = ui.board.getBoundingClientRect().top - document.body.getBoundingClientRect().top;
+  const max = Math.max(0, Math.floor(vh - boardTop - wrapBottom - statusH - gap - bottomPad));
+  if (max === lastBoardMax) return;
+  lastBoardMax = max;
+  ui.boardWrap.style.setProperty("--board-max", max + "px");
+}
+
+function setupBoardFit() {
+  window.addEventListener("resize", fitBoard);
+  window.addEventListener("orientationchange", fitBoard);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", fitBoard);
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(fitBoard).observe(document.body);
+  fitBoard();
+}
+
 function initApp() {
   ui.board = document.getElementById("board");
   ui.status = document.getElementById("status");
+  ui.boardWrap = document.querySelector(".board-wrap");
   ui.turnPanel = document.getElementById("turnPanel");
   ui.aiTime = document.getElementById("aiTime");
   ui.p1Type = document.getElementById("p1Type");
@@ -1028,9 +1099,12 @@ function initApp() {
   ui.scheme = document.getElementById("scheme");
   ui.boardSize = document.getElementById("boardSize");
   ui.resetBtn = document.getElementById("resetBtn");
+  ui.menuBtn = document.getElementById("menuBtn");
   ui.rulesBtn = document.getElementById("rulesBtn");
   ui.rulesClose = document.getElementById("rulesClose");
   ui.rulesDialog = document.getElementById("rulesDialog");
+  ui.optionsClose = document.getElementById("optionsClose");
+  ui.optionsDialog = document.getElementById("optionsDialog");
 
   svg = ui.board;
 
@@ -1052,11 +1126,8 @@ function initApp() {
     });
   }
 
-  ui.rulesBtn.addEventListener("click", () => ui.rulesDialog.showModal());
-  ui.rulesClose.addEventListener("click", () => ui.rulesDialog.close());
-  ui.rulesDialog.addEventListener("click", (e) => {
-    if (e.target === ui.rulesDialog) ui.rulesDialog.close();
-  });
+  wireDialog(ui.rulesDialog, ui.rulesBtn, ui.rulesClose);
+  wireDialog(ui.optionsDialog, ui.menuBtn, ui.optionsClose);
 
   ui.scheme.addEventListener("change", (e) => {
     colourScheme = e.target.value;
@@ -1077,6 +1148,7 @@ function initApp() {
   } else {
     setBoard(48);
   }
+  setupBoardFit();
 }
 
 if (typeof document !== "undefined") {
