@@ -61,7 +61,6 @@
     border-radius: 12px;
     padding: 10px 14px;
   }
-  .controls .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-right: 2px; }
   .reset-btn {
     background: var(--panel-2);
     border: 1px solid var(--line);
@@ -174,9 +173,8 @@
     gap: 8px;
     margin-bottom: 14px;
   }
-  .rules-ruleset .reset-btn { padding: 6px 10px; margin-left: 0; }
+  .rules-ruleset .reset-btn { padding: 6px 10px; }
   .rules-ruleset .label { flex: 1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
-  .rules-dialog .rules-desc { color: var(--text); }
   .rules-dialog .rules-close { margin: 6px 0 0; display: block; width: 100%; }
 
   @media (max-width: 640px) {
@@ -1073,9 +1071,11 @@ function fitBoard() {
   const bodyStyle = getComputedStyle(document.body);
   const gap = parseFloat(bodyStyle.rowGap) || 0;
   const bottomPad = parseFloat(bodyStyle.paddingBottom) || 0;
+  const wrapStyle = getComputedStyle(ui.boardWrap);
+  const wrapBottom = (parseFloat(wrapStyle.paddingBottom) || 0) + (parseFloat(wrapStyle.borderBottomWidth) || 0);
   const statusH = ui.status.getBoundingClientRect().height;
   const boardTop = ui.board.getBoundingClientRect().top - document.body.getBoundingClientRect().top;
-  const max = Math.max(0, Math.floor(vh - boardTop - statusH - gap - bottomPad));
+  const max = Math.max(0, Math.floor(vh - boardTop - wrapBottom - statusH - gap - bottomPad));
   if (max === lastBoardMax) return;
   lastBoardMax = max;
   ui.boardWrap.style.setProperty("--board-max", max + "px");
