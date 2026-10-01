@@ -409,6 +409,7 @@ function el(name, attrs) {
 }
 
 let cells, NEIGHBOURS, cellPolys, boardG, stonesG;
+let CELLS_BY_ID = {};
 let svg;   // assigned in initApp
 
 // Pure board setup: builds cell geometry and adjacency with no DOM access, so
@@ -438,6 +439,9 @@ function loadBoard(size) {
       .map((o) => o.id);
   }
 
+  CELLS_BY_ID = {};
+  for (const c of cells) CELLS_BY_ID[c.id] = c;
+
   // compute viewBox from pentagon bounds with padding
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const c of cells) for (const [x, y] of c.pentagon) {
@@ -446,7 +450,7 @@ function loadBoard(size) {
   }
   const pad = 0.35;
   const viewBox = `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`;
-  return { cells, neighbours: NEIGHBOURS, viewBox };
+  return { cells, neighbours: NEIGHBOURS, byId: CELLS_BY_ID, viewBox };
 }
 
 // DOM: draw the geometry produced by the last loadBoard() call.
@@ -518,12 +522,12 @@ function renderStones() {
   }
   // last-move effects: gray dot on each cascade fill, ring on the placed stone
   for (const id of lastFills) {
-    const c = cells.find((cell) => cell.id === id);
+    const c = CELLS_BY_ID[id];
     if (!c) continue;
     stonesG.appendChild(el("circle", { cx: c.x, cy: c.y, r: 0.14, fill: "#969ca6" }));
   }
   if (lastPlaced !== null && stones[lastPlaced]) {
-    const c = cells.find((cell) => cell.id === lastPlaced);
+    const c = CELLS_BY_ID[lastPlaced];
     if (c) {
       stonesG.appendChild(el("circle", {
         cx: c.x, cy: c.y, r: 0.26, fill: "none",
