@@ -15,6 +15,7 @@
     --gutter: clamp(8px, 2.2vw, 16px);
     --gap: clamp(10px, 2vh, 16px);
     --pad-top: max(clamp(12px, 2.5vw, 24px), env(safe-area-inset-top));
+    --pad-bottom: clamp(16px, 4vw, 40px);
     --pad-left: max(var(--gutter), env(safe-area-inset-left));
     --pad-right: max(var(--gutter), env(safe-area-inset-right));
   }
@@ -30,7 +31,7 @@
     flex-direction: column;
     align-items: center;
     gap: var(--gap);
-    padding: var(--pad-top) var(--pad-right) clamp(16px, 4vw, 40px) var(--pad-left);
+    padding: var(--pad-top) var(--pad-right) var(--pad-bottom) var(--pad-left);
   }
   .board-header {
     position: absolute;
@@ -203,7 +204,8 @@
      sidebar to give the board the full height. The title/scoreboard are pinned
      to the top of that sidebar (see fitBoard, which offsets the menu below). */
   @media (orientation: landscape) and (max-height: 500px) {
-    body { flex-direction: row; align-items: flex-start; }
+    body { --pad-top: 6px; --pad-bottom: 6px; flex-direction: row; align-items: flex-start; }
+    .board-wrap { --wrap-pad: 6px; }
     .board-header {
       position: fixed;
       top: var(--pad-top);
@@ -215,6 +217,7 @@
       margin: 0;
     }
     .board-header .board-title { order: -1; }
+    .turn-panel { flex-direction: column; gap: 4px; }
     .controls {
       flex-direction: column;
       align-items: stretch;
@@ -222,7 +225,8 @@
       margin-top: var(--aside-top, 0);
       padding: 8px;
     }
-    .stage { flex: 1 1 auto; width: auto; min-width: 0; }
+    .stage { flex: 1 1 auto; width: auto; min-width: 0; gap: 6px; }
+    .status { min-height: 0; }
   }
 </style>
 </head>
