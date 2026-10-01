@@ -193,7 +193,7 @@
 <body>
 
 <div class="controls">
-  <button id="rulesBtn" class="reset-btn">Help</button>
+  <button id="rulesBtn" class="reset-btn">Rules</button>
   <button id="menuBtn" class="reset-btn">Menu</button>
   <button id="resetBtn" class="reset-btn">Reset</button>
 </div>
@@ -339,9 +339,8 @@ let CELLS = BOARDS[boardSize];
 
 // display rotation (degrees) per board: each patch is rotated to the
 // orientation that minimises its bounding box, so it sits as a square with as
-// little empty corner space as possible. Cairo-48 is already square when
-// native; Cairo-160 is a diamond and needs -30.
-const BOARD_ROTATE = { 48: 0, 160: -30 };
+// little empty corner space as possible.
+const BOARD_ROTATE = { 48: -30, 160: -30 };
 
 const COLOR_SCHEMES = {
   pastel3: { name: "Pastel 3", A: "#f2d8a7", B: "#bcdcc6", C: "#bcccee" },
