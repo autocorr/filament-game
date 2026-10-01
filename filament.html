@@ -75,12 +75,14 @@
   .reset-btn:hover { background: #2c313b; }
 
   .board-wrap {
+    --wrap-pad: 14px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 14px;
-    padding: 14px;
+    padding: var(--wrap-pad);
     max-width: 720px;
-    width: 100%;
+    width: min(100%, calc(var(--board-max, 100vw) + 2 * var(--wrap-pad) + 2px));
+    margin-inline: auto;
     position: relative;
   }
   svg.board { width: 100%; height: auto; display: block; }
@@ -178,7 +180,7 @@
   .rules-dialog .rules-close { margin: 6px 0 0; display: block; width: 100%; }
 
   @media (max-width: 640px) {
-    .board-wrap { padding: 10px; }
+    .board-wrap { --wrap-pad: 10px; }
     .board-header { position: static; margin-bottom: 8px; }
     .turn-panel {
       flex-direction: row;
@@ -1059,9 +1061,36 @@ function wireDialog(dialog, openBtn, closeBtn) {
   });
 }
 
+// Size the board to the smaller of the available width and height so it never
+// overflows a short viewport (landscape phones, small windows) or wastes
+// vertical space. The svg's top edge sits above any board-sized element, so
+// measuring it is stable regardless of the board's own height.
+let lastBoardMax = -1;
+function fitBoard() {
+  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  const bodyStyle = getComputedStyle(document.body);
+  const gap = parseFloat(bodyStyle.rowGap) || 0;
+  const bottomPad = parseFloat(bodyStyle.paddingBottom) || 0;
+  const statusH = ui.status.getBoundingClientRect().height;
+  const boardTop = ui.board.getBoundingClientRect().top - document.body.getBoundingClientRect().top;
+  const max = Math.max(0, Math.floor(vh - boardTop - statusH - gap - bottomPad));
+  if (max === lastBoardMax) return;
+  lastBoardMax = max;
+  ui.boardWrap.style.setProperty("--board-max", max + "px");
+}
+
+function setupBoardFit() {
+  window.addEventListener("resize", fitBoard);
+  window.addEventListener("orientationchange", fitBoard);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", fitBoard);
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(fitBoard).observe(document.body);
+  fitBoard();
+}
+
 function initApp() {
   ui.board = document.getElementById("board");
   ui.status = document.getElementById("status");
+  ui.boardWrap = document.querySelector(".board-wrap");
   ui.turnPanel = document.getElementById("turnPanel");
   ui.aiTime = document.getElementById("aiTime");
   ui.p1Type = document.getElementById("p1Type");
@@ -1118,6 +1147,7 @@ function initApp() {
   } else {
     setBoard(48);
   }
+  setupBoardFit();
 }
 
 if (typeof document !== "undefined") {
