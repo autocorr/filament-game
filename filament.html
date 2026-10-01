@@ -400,7 +400,6 @@ function buildCells() {
   });
 }
 
-const svg = document.getElementById("board");
 const NS = "http://www.w3.org/2000/svg";
 function el(name, attrs) {
   const node = document.createElementNS(NS, name);
@@ -409,8 +408,13 @@ function el(name, attrs) {
 }
 
 let cells, NEIGHBOURS, cellPolys, boardG, stonesG;
+let svg;   // assigned in initApp
 
-function buildBoard() {
+// Pure board setup: builds cell geometry and adjacency with no DOM access, so
+// it can run under the Node test harness too. Returns the live geometry.
+function loadBoard(size) {
+  boardSize = size;
+  CELLS = BOARDS[size];
   cells = buildCells();
 
   const deg = BOARD_ROTATE[boardSize] || 0;
@@ -440,8 +444,13 @@ function buildBoard() {
     if (x > maxX) maxX = x; if (y > maxY) maxY = y;
   }
   const pad = 0.35;
-  svg.setAttribute("viewBox", `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`);
+  const viewBox = `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`;
+  return { cells, neighbours: NEIGHBOURS, viewBox };
+}
 
+// DOM: draw the geometry produced by the last loadBoard() call.
+function renderBoard(viewBox) {
+  svg.setAttribute("viewBox", viewBox);
   svg.innerHTML = "";
 
   const defs = el("defs", {});
@@ -476,6 +485,11 @@ function buildBoard() {
   svg.appendChild(stonesG);
 
   stones = new Array(CELLS.length).fill(0);
+}
+
+function buildBoard() {
+  const { viewBox } = loadBoard(boardSize);
+  renderBoard(viewBox);
 }
 
 function setBoard(size) {
@@ -746,16 +760,6 @@ function maybeAgentTurn() {
   }, 20);
 }
 
-svg.addEventListener("click", (e) => {
-  const target = e.target;
-  if (!(target instanceof SVGElement)) return;
-  const poly = target.closest ? target.closest(".cell") : null;
-  if (!poly) return;
-  if (aiThinking || gameOver) return;
-  if (agentType[currentPlayer] !== "human") return;
-  playMove(Number(poly.getAttribute("data-id")));
-});
-
 function updateTurnPanel() {
   const wrap = document.getElementById("turnPanel");
   wrap.innerHTML = "";
@@ -774,32 +778,6 @@ function updateTurnPanel() {
   }
 }
 
-document.getElementById("p1Type").addEventListener("change", (e) => {
-  agentType[1] = e.target.value;
-  resetGame();
-});
-
-document.getElementById("p2Type").addEventListener("change", (e) => {
-  agentType[2] = e.target.value;
-  resetGame();
-});
-
-const rulesDialog = document.getElementById("rulesDialog");
-document.getElementById("rulesBtn").addEventListener("click", () => rulesDialog.showModal());
-document.getElementById("rulesClose").addEventListener("click", () => rulesDialog.close());
-rulesDialog.addEventListener("click", (e) => {
-  if (e.target === rulesDialog) rulesDialog.close();
-});
-
-document.getElementById("scheme").addEventListener("change", (e) => {
-  colourScheme = e.target.value;
-  applyColourScheme();
-});
-
-document.getElementById("boardSize").addEventListener("change", (e) => {
-  setBoard(Number(e.target.value));
-});
-
 function resetGame() {
   stones.fill(0);
   lastPlaced = null;
@@ -813,11 +791,287 @@ function resetGame() {
   maybeAgentTurn();
 }
 
-document.getElementById("resetBtn").addEventListener("click", resetGame);
+// ---- self-test ---------------------------------------------------------
+// Behaviour/invariant checks for the pure engine. Deliberately phrased
+// against observable results (not internals) so they stay valid across
+// refactors. Reachable from the console as selfTest(), or by loading
+// filament.html?selftest.
 
-agentType[1] = document.getElementById("p1Type").value;
-agentType[2] = document.getElementById("p2Type").value;
-setBoard(48);
+// groupStats() is shaped { count, sizes } today; accept either that or a
+// bare sizes array so these tests survive the scoring refactor.
+function testSizes(g) {
+  return Array.isArray(g) ? g : g.sizes;
+}
+
+// Run fn with Math.random replaced by a small seedable LCG, then restore it.
+function withSeed(seed, fn) {
+  const original = Math.random;
+  let s = seed >>> 0;
+  Math.random = () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  try { return fn(); } finally { Math.random = original; }
+}
+
+function randomPlayoutWinner(seed) {
+  return withSeed(seed, () => {
+    const board = new Array(cells.length).fill(0);
+    let player = 1;
+    while (!isFullBoard(board)) {
+      const empties = emptyCells(board);
+      const id = empties[(Math.random() * empties.length) | 0];
+      applyMoveOn(board, id, player);
+      player = 3 - player;
+    }
+    return decideWinner(board);
+  });
+}
+
+function selfTest() {
+  const results = [];
+  const check = (name, fn) => {
+    let ok = false, detail = "";
+    try { ok = !!fn(); }
+    catch (err) { ok = false; detail = err && err.message ? err.message : String(err); }
+    results.push({ name, ok, detail });
+  };
+  const expect = (cond, msg) => { if (!cond) throw new Error(msg || "expectation failed"); return true; };
+  const sameCounts = (a, b) => {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
+  };
+
+  // -- geometry ---------------------------------------------------------
+  const checkBoard = (size, cellCount, degMap, colourMap) => {
+    const { cells: cs, neighbours: nb } = loadBoard(size);
+    check(`Cairo-${size}: ${cellCount} cells`,
+      () => expect(cs.length === cellCount, `got ${cs.length}`));
+    check(`Cairo-${size}: every pentagon has 5 vertices`,
+      () => expect(cs.every((c) => c.pentagon.length === 5)));
+    check(`Cairo-${size}: adjacency is symmetric`,
+      () => expect(cs.every((c) => nb[c.id].every((n) => nb[n].includes(c.id)))));
+    const degrees = {};
+    for (const c of cs) { const d = nb[c.id].length; degrees[d] = (degrees[d] || 0) + 1; }
+    check(`Cairo-${size}: degrees ${JSON.stringify(degMap)}`,
+      () => expect(sameCounts(degrees, degMap), JSON.stringify(degrees)));
+    const colours = {};
+    for (const c of cs) colours[c.colour] = (colours[c.colour] || 0) + 1;
+    check(`Cairo-${size}: colours ${JSON.stringify(colourMap)}`,
+      () => expect(sameCounts(colours, colourMap), JSON.stringify(colours)));
+  };
+  checkBoard(48, 48, { 3: 20, 5: 28 }, { A: 16, B: 16, C: 16 });
+  checkBoard(160, 160, { 3: 40, 5: 120 }, { A: 54, B: 52, C: 54 });
+
+  // -- rules ------------------------------------------------------------
+  loadBoard(48);
+  const deg5 = cells.find((c) => NEIGHBOURS[c.id].length === 5);
+  const deg3 = cells.find((c) => NEIGHBOURS[c.id].length === 3);
+  check("flip: no majority -> 0", () => {
+    const b = new Array(cells.length).fill(0);
+    return expect(flipColourOn(b, deg5.id) === 0);
+  });
+  check("flip: 3-of-5 fills opposite colour", () => {
+    const b = new Array(cells.length).fill(0);
+    const ns = NEIGHBOURS[deg5.id];
+    b[ns[0]] = 1; b[ns[1]] = 1; b[ns[2]] = 1; b[ns[3]] = 2; b[ns[4]] = 2;
+    return expect(flipColourOn(b, deg5.id) === 2);
+  });
+  check("flip: 2-of-5 stays empty (below threshold)", () => {
+    const b = new Array(cells.length).fill(0);
+    const ns = NEIGHBOURS[deg5.id];
+    b[ns[0]] = 1; b[ns[1]] = 1;
+    return expect(flipColourOn(b, deg5.id) === 0);
+  });
+  check("flip: 2-of-3 fills opposite colour", () => {
+    const b = new Array(cells.length).fill(0);
+    const ns = NEIGHBOURS[deg3.id];
+    b[ns[0]] = 2; b[ns[1]] = 2;
+    return expect(flipColourOn(b, deg3.id) === 1);
+  });
+  check("applyMove fills only empty cells and stays 0..2", () => {
+    const b = new Array(cells.length).fill(0);
+    const start = cells[0].id;
+    const fills = applyMoveOn(b, start, 1);
+    expect(b[start] === 1, "placed stone not present");
+    expect(fills.every((id) => b[id] !== 0), "a fill left an empty cell");
+    expect(b.every((v) => v >= 0 && v <= 2), "value out of range");
+    return true;
+  });
+  check("emptyCells / isFullBoard agree", () => {
+    const full = new Array(cells.length).fill(1);
+    expect(isFullBoard(full) && emptyCells(full).length === 0);
+    const one = full.slice(); one[0] = 0;
+    expect(!isFullBoard(one) && emptyCells(one).length === 1);
+    return true;
+  });
+
+  // -- groups -----------------------------------------------------------
+  check("groupStats: isolated stone is one group of size 1", () => {
+    const b = new Array(cells.length).fill(0);
+    b[0] = 1;
+    return expect(JSON.stringify(testSizes(groupStats(b, 1))) === "[1]");
+  });
+  check("groupStats: adjacent stones form one group", () => {
+    const b = new Array(cells.length).fill(0);
+    const c = cells[0].id;
+    b[c] = 1; b[NEIGHBOURS[c][0]] = 1;
+    return expect(JSON.stringify(testSizes(groupStats(b, 1))) === "[2]");
+  });
+  check("groupStats: non-adjacent stones are separate groups", () => {
+    const b = new Array(cells.length).fill(0);
+    let a = null, d = null;
+    for (const c of cells) {
+      const far = cells.find((o) => o.id !== c.id && !NEIGHBOURS[c.id].includes(o.id));
+      if (far) { a = c.id; d = far.id; break; }
+    }
+    b[a] = 1; b[d] = 1;
+    return expect(JSON.stringify(testSizes(groupStats(b, 1))) === "[1,1]");
+  });
+
+  // -- verdict / tie-break ---------------------------------------------
+  check("decideWinner: empty board is a draw", () => {
+    const b = new Array(cells.length).fill(0);
+    return expect(decideWinner(b) === 0);
+  });
+  check("decideWinner: fewer groups wins", () => {
+    const b = new Array(cells.length).fill(0);
+    const c = cells[0].id;
+    b[c] = 1; b[NEIGHBOURS[c][0]] = 1;   // P1: one group
+    let x = null, y = null;
+    for (const p of cells) {
+      if (p.id === c || NEIGHBOURS[c].includes(p.id)) continue;
+      for (const q of cells) {
+        if (q.id === p.id || NEIGHBOURS[p.id].includes(q.id)) continue;
+        if (q.id === c || NEIGHBOURS[c].includes(q.id)) continue;
+        x = p.id; y = q.id; break;
+      }
+      if (x !== null) break;
+    }
+    expect(x !== null, "no second isolated cell found");
+    b[x] = 2; b[y] = 2;                  // P2: two groups
+    return expect(decideWinner(b) === 1);
+  });
+  check("decideWinner: tie broken by smaller first group", () => {
+    // P1: two isolated stones [1,1]; P2: adjacent pair + isolated stone [2,1]
+    const ids = cells.map((c) => c.id);
+    let found = null;
+    outer:
+    for (const a of ids) for (const bb of ids) {
+      if (bb <= a || NEIGHBOURS[a].includes(bb)) continue;
+      for (const c of ids) for (const d of ids) {
+        if (d <= c || !NEIGHBOURS[c].includes(d)) continue;
+        if ([a, bb].includes(c) || [a, bb].includes(d)) continue;
+        for (const e of ids) {
+          if ([a, bb, c, d].includes(e)) continue;
+          if (NEIGHBOURS[c].includes(e) || NEIGHBOURS[d].includes(e)) continue;
+          const b = new Array(cells.length).fill(0);
+          b[a] = 1; b[bb] = 1; b[c] = 2; b[d] = 2; b[e] = 2;
+          if (testSizes(groupStats(b, 1)).length === 2 &&
+              testSizes(groupStats(b, 2)).length === 2) { found = b; break outer; }
+        }
+      }
+    }
+    expect(found, "no tie-break configuration found");
+    return expect(decideWinner(found) === 1);
+  });
+
+  // -- playout / search -------------------------------------------------
+  check("seeded playout reaches a valid winner", () => {
+    const w = randomPlayoutWinner(7);
+    return expect(w === 0 || w === 1 || w === 2);
+  });
+  check("same seed -> same winner", () => {
+    return expect(randomPlayoutWinner(11) === randomPlayoutWinner(11));
+  });
+  check("mctsSearch returns a legal move", () => {
+    const b = new Array(cells.length).fill(0);
+    const move = mctsSearch(b, 1, 0);
+    return expect(move === -1 || b[move] === 0);
+  });
+
+  const failed = results.filter((r) => !r.ok).length;
+  const summary = { passed: results.length - failed, failed, results };
+  if (typeof console !== "undefined") {
+    for (const r of results) if (!r.ok) console.error("self-test FAIL:", r.name, r.detail);
+    console.log(`self-test: ${summary.passed}/${results.length} passed`);
+  }
+  return summary;
+}
+
+function renderSelfTestResults(summary) {
+  document.getElementById("status").innerHTML =
+    `<div class="verdict"><b>Self-test ${summary.failed ? "FAIL" : "PASS"}</b> ` +
+    `&nbsp;·&nbsp; ${summary.passed}/${summary.results.length}</div>` +
+    `<div class="scoreline">` +
+    summary.results.map((r) => `${r.ok ? "ok" : "FAIL"} ${r.name}`).join("<br>") +
+    `</div>`;
+}
+
+function initApp() {
+  svg = document.getElementById("board");
+
+  svg.addEventListener("click", (e) => {
+    const target = e.target;
+    if (!(target instanceof SVGElement)) return;
+    const poly = target.closest ? target.closest(".cell") : null;
+    if (!poly) return;
+    if (aiThinking || gameOver) return;
+    if (agentType[currentPlayer] !== "human") return;
+    playMove(Number(poly.getAttribute("data-id")));
+  });
+
+  document.getElementById("p1Type").addEventListener("change", (e) => {
+    agentType[1] = e.target.value;
+    resetGame();
+  });
+  document.getElementById("p2Type").addEventListener("change", (e) => {
+    agentType[2] = e.target.value;
+    resetGame();
+  });
+
+  const rulesDialog = document.getElementById("rulesDialog");
+  document.getElementById("rulesBtn").addEventListener("click", () => rulesDialog.showModal());
+  document.getElementById("rulesClose").addEventListener("click", () => rulesDialog.close());
+  rulesDialog.addEventListener("click", (e) => {
+    if (e.target === rulesDialog) rulesDialog.close();
+  });
+
+  document.getElementById("scheme").addEventListener("change", (e) => {
+    colourScheme = e.target.value;
+    applyColourScheme();
+  });
+  document.getElementById("boardSize").addEventListener("change", (e) => {
+    setBoard(Number(e.target.value));
+  });
+  document.getElementById("resetBtn").addEventListener("click", resetGame);
+
+  agentType[1] = document.getElementById("p1Type").value;
+  agentType[2] = document.getElementById("p2Type").value;
+
+  if (location.search.includes("selftest")) {
+    const summary = selfTest();
+    setBoard(48);
+    renderSelfTestResults(summary);
+  } else {
+    setBoard(48);
+  }
+}
+
+if (typeof document !== "undefined") {
+  initApp();
+}
+
+// Expose the pure engine to the Node test harness (browsers skip this).
+if (typeof document === "undefined") {
+  globalThis.__filament = {
+    BOARDS, loadBoard, buildCells, toneOf,
+    flipColourOn, applyMoveOn, emptyCells, isFullBoard,
+    groupStats, decideWinner,
+    makeNode, bestUCT, selectAndExpand, simulate, backpropagate, mctsSearch,
+    selfTest, randomPlayoutWinner,
+  };
+}
 </script>
 </body>
 </html>
