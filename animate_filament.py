@@ -229,15 +229,19 @@ def group_stats(board, player):
     return {"count": len(sizes), "sizes": sizes}
 
 
-def decide_winner(board):
-    a = group_stats(board, 1)
-    b = group_stats(board, 2)
-    if a["count"] != b["count"]:
-        return 1 if a["count"] < b["count"] else 2
-    for i in range(a["count"]):
-        if a["sizes"][i] != b["sizes"][i]:
-            return 1 if a["sizes"][i] < b["sizes"][i] else 2
+def compare_group_sizes(a_sizes, b_sizes):
+    if len(a_sizes) != len(b_sizes):
+        return 1 if len(a_sizes) < len(b_sizes) else 2
+    for x, y in zip(a_sizes, b_sizes):
+        if x != y:
+            return 1 if x < y else 2
     return 0
+
+
+def decide_winner(board):
+    return compare_group_sizes(
+        group_stats(board, 1)["sizes"], group_stats(board, 2)["sizes"]
+    )
 
 
 # =========================================================================
@@ -577,6 +581,14 @@ def run_self_test():
     board2, _ = replay_board(a)
     check("replay reproduces the final board",
           decide_winner(board2) == a["winner"])
+
+    # tie-break: a player missing a group at a cascade position counts as zero
+    check("fewer groups wins cascade",
+          compare_group_sizes([4, 2, 1], [4, 2, 1, 1]) == 1)
+    check("equal sizes draw", compare_group_sizes([4, 2, 1], [4, 2, 1]) == 0)
+    check("smaller group wins cascade",
+          compare_group_sizes([4, 2, 1], [4, 1, 1]) == 2)
+    check("empty sizes draw", compare_group_sizes([], []) == 0)
 
     print("self-test:", "PASS" if not problems else f"FAIL ({len(problems)})")
     return not problems
