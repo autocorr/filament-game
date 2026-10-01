@@ -712,15 +712,18 @@ function updateStatus() {
     const plural = (n) => (n === 1 ? "group" : "groups");
     const verdict = w === 0 ? "<b>Draw</b>" : `<b>${name(w)} wins</b>`;
     const groups = (g) => (g.sizes.length ? g.sizes.join(" · ") : "—");
+    const line = (p, g) =>
+      `${name(p)}: <b>${g.count}</b> ${plural(g.count)} &nbsp;[${groups(g)}]`;
     ui.status.innerHTML =
       `<div class="verdict"><b>Game over</b> &nbsp;·&nbsp; ${verdict}</div>` +
       `<div class="scoreline">` +
-        `${name(1)}: <b>${a.count}</b> ${plural(a.count)} &nbsp;[${groups(a)}]` +
-        ` &nbsp;·&nbsp; ${name(2)}: <b>${b.count}</b> ${plural(b.count)} &nbsp;[${groups(b)}]` +
+        `${line(1, a)}<br>${line(2, b)}` +
       `</div>`;
+    fitBoard();
     return;
   }
   ui.status.innerHTML = "";
+  fitBoard();
 }
 
 // ---- UCT / Monte Carlo Tree Search ----
