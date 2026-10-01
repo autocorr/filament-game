@@ -236,8 +236,8 @@
 
 <script>
 const STONES = {
-  1: { base: "#202329", name: "Black" },
-  2: { base: "#f2f2f0", name: "White" },
+  1: { base: "#202329", name: "Black", mark: "#ffffff" },
+  2: { base: "#f2f2f0", name: "White", mark: "#0e0f13" },
 };
 let currentPlayer = 1;
 let gameOver = false;
@@ -245,6 +245,8 @@ const agentType = { 1: "human", 2: "ai" };
 let aiThinking = false;
 let aiGeneration = 0;
 let stones;
+let lastPlaced = null;   // cell id of the stone just placed
+let lastFills = [];      // cell ids filled by the cascade this turn
 
 const BOARDS = {
   48: [
@@ -497,6 +499,21 @@ function renderStones() {
     g.appendChild(base);
     stonesG.appendChild(g);
   }
+  // last-move effects: gray dot on each cascade fill, ring on the placed stone
+  for (const id of lastFills) {
+    const c = cells.find((cell) => cell.id === id);
+    if (!c) continue;
+    stonesG.appendChild(el("circle", { cx: c.x, cy: c.y, r: 0.14, fill: "#969ca6" }));
+  }
+  if (lastPlaced !== null && stones[lastPlaced]) {
+    const c = cells.find((cell) => cell.id === lastPlaced);
+    if (c) {
+      stonesG.appendChild(el("circle", {
+        cx: c.x, cy: c.y, r: 0.26, fill: "none",
+        stroke: STONES[stones[lastPlaced]].mark, "stroke-width": 0.06,
+      }));
+    }
+  }
   updateStatus();
 }
 
@@ -520,6 +537,7 @@ function flipColourOn(board, id) {
 
 function applyMoveOn(board, id, player) {
   board[id] = player;
+  const filled = [];
   let changed = true;
   while (changed) {
     changed = false;
@@ -529,9 +547,10 @@ function applyMoveOn(board, id, player) {
       const colour = flipColourOn(board, c.id);
       if (colour) fills.push([c.id, colour]);
     }
-    for (const [i, colour] of fills) board[i] = colour;
+    for (const [i, colour] of fills) { board[i] = colour; filled.push(i); }
     if (fills.length) changed = true;
   }
+  return filled;
 }
 
 function emptyCells(board) {
@@ -695,7 +714,8 @@ function mctsSearch(board, player, timeMs) {
 // ---- interactions ----
 function playMove(id) {
   if (gameOver || stones[id]) return;
-  applyMoveOn(stones, id, currentPlayer);
+  lastFills = applyMoveOn(stones, id, currentPlayer);
+  lastPlaced = id;
   if (isFullBoard(stones)) gameOver = true;
   else currentPlayer = 3 - currentPlayer;
   renderStones();
@@ -780,6 +800,8 @@ document.getElementById("boardSize").addEventListener("change", (e) => {
 
 function resetGame() {
   stones.fill(0);
+  lastPlaced = null;
+  lastFills = [];
   currentPlayer = 1;   // Black (P1) always moves first
   gameOver = false;
   aiThinking = false;

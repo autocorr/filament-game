@@ -17,7 +17,8 @@ The design goal is reproducibility and low coupling:
     byte reproducible (use --think for a wall-clock search when you don't care).
 
 Visual conventions:
-  * the stone just placed is marked with a small RED dot;
+  * the stone just placed is ringed in a contrasting colour (white on a black
+    stone, near-black on a white stone);
   * each cascading fill appears one at a time, marked with a small GRAY dot;
   * when the game ends the winning side's stones are ringed in YELLOW.
 
@@ -375,7 +376,7 @@ def replay_board(log):
 @dataclass
 class Beat:
     board: list          # board state at this beat
-    placed: int | None   # cell just placed (RED dot)
+    placed: int | None   # cell just placed (contrasting ring)
     fills: list          # fill cells shown so far this turn (GRAY dots)
     highlight: int | None
     duration_ms: int
@@ -414,12 +415,13 @@ GRID = (58, 63, 74)
 STONE_BASE = (32, 35, 41)
 STONE_WHITE = (242, 242, 240)
 STONE_EDGE = (14, 15, 19)
-RED = (230, 57, 53)
 GRAY = (150, 156, 166)
 YELLOW = (255, 213, 79)
 
 STONE_R = 0.42
 MARK_R = 0.135
+RING_R = 0.26
+RING_W = 0.06
 HALO_R = 0.5
 
 
@@ -478,8 +480,12 @@ def render_frame(bg, layout, size, board, placed, fills, highlight):
         d.ellipse([x - mr, y - mr, x + mr, y + mr], fill=GRAY)
     if placed is not None:
         c = CELL_BY_ID[placed]
+        s = board[placed]
         x, y = layout.pt(c["x"], c["y"])
-        d.ellipse([x - mr, y - mr, x + mr, y + mr], fill=RED)
+        rr = RING_R * layout.k
+        d.ellipse([x - rr, y - rr, x + rr, y + rr],
+                  outline=STONE_WHITE if s == 1 else STONE_EDGE,
+                  width=max(1, int(RING_W * layout.k)))
 
     if highlight:
         hr = HALO_R * layout.k
@@ -508,7 +514,7 @@ def save_gif(frames, durations_ms, path, colors=64):
     sw = 48
     key_colours = [BG, GRID, CELL_COLOUR["A"], CELL_COLOUR["B"],
                    CELL_COLOUR["C"], STONE_BASE, STONE_WHITE, STONE_EDGE,
-                   RED, GRAY, YELLOW]
+                   GRAY, YELLOW]
     thumbs = [f.resize((sw, sw), Image.LANCZOS) for f in frames]
     width = sw * max(len(thumbs), len(key_colours))
     montage = Image.new("RGB", (width, sw))
